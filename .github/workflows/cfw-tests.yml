@@ -15,4 +15,6 @@ jobs:
       - working-directory: simulator
         run: alr exec -- gprbuild -P cfw_tests.gpr -j0
       - working-directory: simulator
+        env:
+          WNM_SIM_DISABLE_MIDI: '1'
         run: xvfb-run -a ./bin/cfw-tests

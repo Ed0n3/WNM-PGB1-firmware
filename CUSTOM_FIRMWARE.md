@@ -161,6 +161,8 @@ alr exec -- gprbuild -P cfw_tests.gpr -j0
 ```
 
 Linux test runs need a display, or `xvfb-run -a ./bin/cfw-tests` in CI.
+Set `WNM_SIM_DISABLE_MIDI=1` when no external MIDI backend is available.
+CI uses this option because hosted runners have no ALSA sequencer device.
 Tests create a fresh in-memory filesystem. They cover bounded allocation,
 audio rendering across tracks 1–8, track routing, reserved FX/MIDI roles,
 eight distinct simultaneous samples, Custom-scale editor navigation,

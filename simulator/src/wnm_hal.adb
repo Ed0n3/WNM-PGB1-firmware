@@ -19,6 +19,7 @@ with Tresses_Config;
 with GNAT.Source_Info;
 
 with Ada.Numerics.Float_Random;
+with Ada.Environment_Variables;
 
 package body WNM_HAL is
 
@@ -29,10 +30,24 @@ package body WNM_HAL is
    Pixels_Internal : array (Pix_X, Pix_Y) of Boolean :=
      (others => (others => False));
 
-   MIDI_Out : constant RtMIDI.MIDI_Out :=
-     RtMIDI.Create (Wnm_Pgb1_Simulator_Config.Crate_Name);
-   MIDI_In : constant RtMIDI.MIDI_In :=
-     RtMIDI.Create (Wnm_Pgb1_Simulator_Config.Crate_Name);
+   MIDI_Enabled : constant Boolean :=
+     Ada.Environment_Variables.Value ("WNM_SIM_DISABLE_MIDI", "0") /= "1";
+
+   --  Hosted test runners have no MIDI device. Avoid creating an RtMidi
+   --  backend when MIDI is explicitly disabled, including at elaboration.
+   type MIDI_Devices (Enabled : Boolean) is limited record
+      case Enabled is
+         when True =>
+            Output : RtMIDI.MIDI_Out :=
+              RtMIDI.Create (Wnm_Pgb1_Simulator_Config.Crate_Name);
+            Input : RtMIDI.MIDI_In :=
+              RtMIDI.Create (Wnm_Pgb1_Simulator_Config.Crate_Name);
+         when False =>
+            null;
+      end case;
+   end record;
+
+   Devices : MIDI_Devices (MIDI_Enabled);
 
    MIDI_In_Queue : MIDI.Decoder.Queue.Instance (1024);
 
@@ -406,7 +421,10 @@ package body WNM_HAL is
       Data : constant Storage_Array := MIDI.Encoder.Encode (Msg);
       Success : Boolean;
    begin
-      RtMIDI.Send_Message (MIDI_Out, Data, Success);
+      if not MIDI_Enabled then
+         return;
+      end if;
+      RtMIDI.Send_Message (Devices.Output, Data, Success);
 
       if not Success then
          raise Program_Error with "MIDI OUT error";
@@ -546,33 +564,35 @@ package body WNM_HAL is
    is (False);
 
 begin
-   if not RtMIDI.Valid (MIDI_Out) then
-      raise Program_Error with "Cannot create MIDI out device";
-   end if;
+   if MIDI_Enabled then
+      if not RtMIDI.Valid (Devices.Output) then
+         raise Program_Error with "Cannot create MIDI out device";
+      end if;
 
-   pragma Warnings (Off, "condition is always");
-   if Wnm_Pgb1_Simulator_Config.Alire_Host_OS = "windows" then
-      RtMIDI.Open_Port (MIDI_Out, 1, "Output");
-   else
-      RtMIDI.Create_Virtual_Port (MIDI_Out, "Output");
-   end if;
+      pragma Warnings (Off, "condition is always");
+      if Wnm_Pgb1_Simulator_Config.Alire_Host_OS = "windows" then
+         RtMIDI.Open_Port (Devices.Output, 1, "Output");
+      else
+         RtMIDI.Create_Virtual_Port (Devices.Output, "Output");
+      end if;
 
-   if not RtMIDI.Valid (MIDI_In) then
-      raise Program_Error with "Cannot create MIDI In device";
-   end if;
+      if not RtMIDI.Valid (Devices.Input) then
+         raise Program_Error with "Cannot create MIDI In device";
+      end if;
 
-   RtMIDI.Ignore_Messages (MIDI_In,
-                           SysEx => True,
-                           Time  => False,
-                           Sense => True);
+      RtMIDI.Ignore_Messages (Devices.Input,
+                             SysEx => True,
+                             Time  => False,
+                             Sense => True);
 
-   RtMIDI.Set_Callback (MIDI_In, MIDI_Input_Callback_C'Access);
+      RtMIDI.Set_Callback (Devices.Input, MIDI_Input_Callback_C'Access);
 
-   pragma Warnings (Off, "condition is always *");
-   if Wnm_Pgb1_Simulator_Config.Alire_Host_OS = "windows" then
-      RtMIDI.Open_Port (MIDI_In, 0, "Input");
-   else
-      RtMIDI.Create_Virtual_Port (MIDI_In, "Input");
+      pragma Warnings (Off, "condition is always *");
+      if Wnm_Pgb1_Simulator_Config.Alire_Host_OS = "windows" then
+         RtMIDI.Open_Port (Devices.Input, 0, "Input");
+      else
+         RtMIDI.Create_Virtual_Port (Devices.Input, "Input");
+      end if;
    end if;
 
 end WNM_HAL;
