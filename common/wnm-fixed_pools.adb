@@ -3,7 +3,8 @@ package body WNM.Fixed_Pools is
                        Address : out System.Address;
                        Size_In_Storage_Elements, Alignment : Storage_Count)
    is
-      Stride : constant Storage_Count := This.Bytes / Storage_Count (This.Capacity);
+      Stride : constant Storage_Count :=
+        This.Bytes / Storage_Count (This.Capacity);
    begin
       if Size_In_Storage_Elements > Stride or else Alignment > 8 then
          raise Storage_Error;
@@ -11,7 +12,8 @@ package body WNM.Fixed_Pools is
       for I in This.Used'Range loop
          if not This.Used (I) then
             This.Used (I) := True;
-            Address := This.Memory (Storage_Offset (I - 1) * Stride + 1)'Address;
+            Address :=
+              This.Memory (Storage_Offset (I - 1) * Stride + 1)'Address;
             return;
          end if;
       end loop;
@@ -23,7 +25,8 @@ package body WNM.Fixed_Pools is
                          Size_In_Storage_Elements, Alignment : Storage_Count)
    is
       pragma Unreferenced (Size_In_Storage_Elements, Alignment);
-      Stride : constant Storage_Count := This.Bytes / Storage_Count (This.Capacity);
+      Stride : constant Storage_Count :=
+        This.Bytes / Storage_Count (This.Capacity);
       I : constant Positive := Positive
         ((To_Integer (Address) - To_Integer (This.Memory'Address)) /
            Integer_Address (Stride) + 1);

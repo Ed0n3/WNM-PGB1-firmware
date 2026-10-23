@@ -509,10 +509,11 @@ package body WNM.GUI.Menu.Track_Settings is
    begin
       if This.Current_Setting = Project.Arp_Note then
          if Event.Kind = A_Press then
-            Editing_Arp_Note := Editing_Arp_Note mod Project.Arp_Length (Editing_Track) + 1;
+            Editing_Arp_Note :=
+              Editing_Arp_Note mod Project.Arp_Length (Editing_Track) + 1;
             return;
          elsif Event.Kind = B_Press then
-            Editing_Arp_Note := (if Editing_Arp_Note <= 1 then
+            Editing_Arp_Note := (if Editing_Arp_Note = 1 then
                                   Project.Arp_Length (Editing_Track)
                                 else Editing_Arp_Note - 1);
             return;

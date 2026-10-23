@@ -107,7 +107,8 @@ package body WNM.GUI.Menu.Chord_Settings is
             This.Chord :=
               (if This.Chord = Project.Progression_Length (This.Progression)
                then Project.Chord_Slot_Id'First else This.Chord + 1);
-            Project.Set (This.Progression, This.Chord, Project.Custom_Chord, 1.0);
+            Project.Set
+              (This.Progression, This.Chord, Project.Custom_Chord, 1.0);
             This.Note := Custom_Note_Setting'First;
          when B_Press => Menu.Pop (Success);
       end case;

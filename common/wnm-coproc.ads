@@ -28,7 +28,9 @@ private with Ada.Unchecked_Conversion;
 
 package WNM.Coproc is
 
-   type Message_Kind is (MIDI_Event, Buffer_Available, Synth_CPU_Crash, Sample_Preview, Voice_Config)
+   type Message_Kind is
+     (MIDI_Event, Buffer_Available, Synth_CPU_Crash, Sample_Preview,
+      Voice_Config)
      with Size => 4;
 
    subtype MIDI_Event_Rec is MIDI.Message;

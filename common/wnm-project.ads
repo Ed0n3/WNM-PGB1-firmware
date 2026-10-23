@@ -1132,7 +1132,8 @@ private
 
       Patterns : All_Pattern_Arr := (others => (others => Default_Pattern));
 
-      Steps : All_Steps_Arr := (others => (others => (others => Default_Step)));
+      Steps : All_Steps_Arr :=
+        (others => (others => (others => Default_Step)));
 
       Parts : Song_Part_Arr;
 

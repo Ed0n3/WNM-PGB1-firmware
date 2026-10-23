@@ -16,6 +16,8 @@ jobs:
 
     - name: Set up Alire
       uses: alire-project/setup-alire@v5
+      with:
+        version: '2.1.1'
       
     - name: Alire Update
       working-directory: device/

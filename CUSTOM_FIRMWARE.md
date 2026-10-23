@@ -122,77 +122,55 @@ arpeggiator lists, recording quantization and step onset offsets are saved.
 Stock firmware cannot read version 2 projects. Keep copies of stock projects
 before saving them with this firmware.
 
-## Building on Windows
+## Building
 
-For a fresh checkout, install Git and Python 3, then run:
+Use Alire 2.1.1 or later with GNAT and GPRbuild. The SDK selects the ARM
+cross compiler for device builds. Synth, SDK and ROM-tool source revisions
+are pinned in the Alire manifests.
 
-```powershell
-./scripts/setup-windows.ps1
-./scripts/build.ps1 -Target all -Python python
+From the repository root:
+
+```sh
+alr -C device build --release
+alr -C device build --validation
+alr -C simulator build
 ```
 
-You can pass the full path to an existing Python executable. The setup script
-installs Alire 2.1.1, native GNAT 16.1.0, GPRbuild 26.0.1, the ARM GNAT 14.2.1
-toolchain required by the SDK, MSYS2 audio/MIDI libraries and CSFML 2.6.1.
-Downloaded tools are stored locally under `.tools` and are excluded from Git.
-Synth, SDK and ROM-tool source revisions are pinned in the Alire manifests.
+On Ubuntu, install `libcsfml-dev`, `librtmidi-dev` and `librtaudio-dev`
+before building the simulator. On Windows, the matching CSFML, RtMidi and
+RtAudio libraries must be available to the compiler and their runtime DLLs
+must be beside the executable or on PATH.
 
-Build targets are `device`, `simulator`, `tests` and `all`. Generated files:
+The Firmware GitHub Actions workflow publishes the release ELF and UF2
+as build artifacts. The simulator executable is written to `simulator/bin`.
+Start it from the `simulator` directory:
 
-| File | Purpose |
-| --- | --- |
-| `artifacts/pgb1-cfw.uf2` | Code-only RP2040 firmware image |
-| `artifacts/pgb1-cfw.elf` | Linked firmware with symbols |
-| `artifacts/pgb1-cfw.bin` | Raw flash code image |
-| `simulator/bin/wnm-pgb1-simulator.exe` | Windows simulator |
-| `simulator/bin/wnm-pgb1-rom-tool.exe` | Factory ROM/filesystem tool |
-| `simulator/bin/cfw-tests.exe` | Regression test executable |
-
-The device script normally uses `alr build --release`. If Windows rejects the
-compiler's `collect2` helper, it uses the compiler-generated link plan with GNU
-`ld` directly. It does not change Windows security settings. UF2 conversion
-checks that the code image stays within the existing 1 MiB code partition.
-
-Double-click **Run Simulator.cmd** in the repository folder. It sets the working
-directory and starts the simulator with its own custom ROM file. The Windows
-build script bundles all seven required non-system DLLs beside the executable
-in `simulator/bin`; no PATH changes or system-wide DLL installation are needed.
-
-Alternatively, start it from PowerShell:
-
-```powershell
-./scripts/run-simulator.ps1
+```sh
+./bin/wnm-pgb1-simulator --rom=custom-firmware.rom --rom-desc=share/wnm_pgb1_simulator/rom_desc.toml
 ```
 
-This launcher uses `artifacts/pgb1-cfw-simulator.rom`. The ROM is separate from any
-stock simulator project storage. The existing simulator keyboard layout and
-controls are unchanged.
+On Windows, the executable has an `.exe` suffix. Keep the `simulator/share`
+resources available at the same relative path. This command uses a separate
+custom ROM file; the simulator keyboard layout and controls are unchanged.
 
-For an older build that does not have DLLs in `simulator/bin`, run
-`./scripts/copy-simulator-dlls.ps1` once. Keep the repository's `simulator/share`
-folder alongside `simulator/bin`, since it contains the interface resources and
-factory samples. Copying just the EXE to another folder is insufficient.
-The double-click launcher and regression executable were also verified with
-only Windows directories on PATH, using the bundled DLLs.
+Build and run regression tests from the `simulator` directory:
 
-Build and run regression tests:
-
-```powershell
-./scripts/build.ps1 -Target tests -RunTests -Python python
+```sh
+alr exec -- gprbuild -P cfw_tests.gpr -j0
+./bin/cfw-tests
 ```
 
+Linux test runs need a display, or `xvfb-run -a ./bin/cfw-tests` in CI.
 Tests create a fresh in-memory filesystem. They cover bounded allocation,
 audio rendering across tracks 1–8, track routing, reserved FX/MIDI roles,
-eight distinct simultaneous samples on tracks 1–8, Custom-scale editor
-navigation, arbitrary chord notes, arpeggiator lengths and directions,
-recording position and timing, v2 persistence, and legacy mode migration. A Linux CI
-workflow is included to build and run them under Xvfb.
+eight distinct simultaneous samples, Custom-scale editor navigation,
+arbitrary chord notes, arpeggiator lengths and directions, recording
+position and timing, v2 persistence, and legacy mode migration.
 
 ## Validation status
 
 Firmware and simulator compilation/linking were completed in this workspace.
-The firmware fits the RP2040 RAM and existing code partition. Build metadata,
-memory use and artifact hashes are recorded in `artifacts/build-report.json`.
+The firmware fits the RP2040 RAM and existing code partition.
 
 After Windows application control was unblocked, the native regression suite
 passed with exit code 0. All internal instrument families rendered successfully.

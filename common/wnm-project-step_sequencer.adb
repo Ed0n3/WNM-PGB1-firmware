@@ -676,10 +676,12 @@ package body WNM.Project.Step_Sequencer is
       P : constant Patterns :=
         (if Playing and then Have_Step_Time then PH.P else Editing_Pattern);
       S : constant Sequencer_Steps :=
-        (if Playing and then Have_Step_Time then Sequencer_Steps (PH.Steps_Count)
+        (if Playing and then Have_Step_Time then
+           Sequencer_Steps (PH.Steps_Count)
          else Editing_Step);
       Data : Step_Rec renames G_Project.Steps (T)(P)(S);
-      Span : constant Time.Time_Microseconds := Microseconds_Per_Beat / Steps_Per_Beat;
+      Span : constant Time.Time_Microseconds :=
+        Microseconds_Per_Beat / Steps_Per_Beat;
       Phase : Time.Time_Microseconds := 0;
       Gate : Time.Time_Microseconds;
    begin
@@ -708,7 +710,8 @@ package body WNM.Project.Step_Sequencer is
         when N_16th => Microseconds_Per_Beat / 4,
         when N_32nd => Microseconds_Per_Beat / 8);
       Process_CC_Values (P, T, S);
-      Play_Now (Now, T, Offset (Key, G_Project.Tracks (T).Offset), Velocity, Gate);
+      Play_Now
+        (Now, T, Offset (Key, G_Project.Tracks (T).Offset), Velocity, Gate);
    end Record_Note;
 
    --------------

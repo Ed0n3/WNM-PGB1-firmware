@@ -235,8 +235,7 @@ package body WNM.GUI.Menu.Tracks_Mixer is
 
             Draw_Str (X_Col_Center - Font_Width + 1,
                       Top_Text_Y,
-                      (if Id < 10 then "0" else "") &
-                        WNM.Utils.Trim (Id'Img));
+                      "0" & WNM.Utils.Trim (Id'Img));
 
             case Sub (Top) is
                when Volume =>

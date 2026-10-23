@@ -18,7 +18,6 @@ with WNM.GUI.Menu;
 with WNM.GUI.Menu.Tracks_Mixer;
 with WNM.GUI.Menu.Track_Settings.CFW_Tests;
 with WNM.Screen;
-with Test_Screenshots;
 
 package body WNM.Project.CFW_Tests is
    use type MIDI.MIDI_Data;
@@ -29,7 +28,6 @@ package body WNM.Project.CFW_Tests is
    use type Time.Time_Microseconds;
    use type WNM.Coproc.Message_Kind;
    use type WNM_HAL.Mono_Point;
-   use type WNM_HAL.Audio_Volume;
 
    procedure Check (Condition : Boolean; Message : String) is
    begin
@@ -97,7 +95,8 @@ package body WNM.Project.CFW_Tests is
          Check (Exhausted, "fixed pool capacity");
          Release (A);
          C := new Data'(others => 44);
-         Check (B (1) = 42 and C (16) = 44, "pool reuse preserves other slot");
+         Check (B (1) = 42 and then C (16) = 44,
+                "pool reuse preserves other slot");
          Release (B);
          Release (C);
       end;
@@ -115,7 +114,7 @@ package body WNM.Project.CFW_Tests is
    begin
       Clear;
       Drain;
-      --  Exercise allocation and engine reuse across the eight instrument tracks.
+      --  Exercise allocation and engine reuse across all instrument tracks.
       --  Every instrument family must also render from freshly reused memory.
       for M in Track_Mode_Kind range Sample1_Mode .. Chord_Mode loop
          Clear;
@@ -233,11 +232,13 @@ package body WNM.Project.CFW_Tests is
       for I in 0 .. 7 loop
          Check (Mode (Tracks (1 + I)) = Sample_Mode and then
                 G_Project.Tracks (Tracks (1 + I)).CC (A).Value =
-                  MIDI.MIDI_Data (I), "independent sample assignments persist");
+                  MIDI.MIDI_Data (I),
+                "independent sample assignments persist");
       end loop;
       Clear;
       Drain;
-      Ada.Text_IO.Put_Line ("Eight distinct simultaneous samples checked on tracks 1-8");
+      Ada.Text_IO.Put_Line
+        ("Eight distinct simultaneous samples checked on tracks 1-8");
    end Test_Eight_Samplers;
 
    procedure Test_Instrument_Modes is
@@ -263,7 +264,8 @@ package body WNM.Project.CFW_Tests is
             Next_Value (T, Track_Mode);
             Drain;
          end loop;
-         Check (Mode (T) = MIDI_Mode, "instrument mode cycle wraps after chord");
+         Check (Mode (T) = MIDI_Mode,
+                "instrument mode cycle wraps after chord");
          for I in reverse Expected'Range loop
             Prev_Value (T, Track_Mode);
             Check (Mode (T) = Expected (I), "reverse mode cycle excludes FX");
@@ -278,7 +280,8 @@ package body WNM.Project.CFW_Tests is
       end loop;
       Clear;
       Drain;
-      Ada.Text_IO.Put_Line ("Synth/sample/MIDI-only selection checked on tracks 1-8");
+      Ada.Text_IO.Put_Line
+        ("Synth/sample/MIDI-only selection checked on tracks 1-8");
    end Test_Instrument_Modes;
 
    procedure Test_Reserved_Tracks is
@@ -338,9 +341,7 @@ package body WNM.Project.CFW_Tests is
       Check (Selected_Custom (Prog, 1) and then
              Selected_Notes (Prog, 1) = Before,
              "Custom appears in the chord's own preset/scale list");
-      Test_Screenshots.Save ("chord-custom-option");
       Send (A_Press);
-      Test_Screenshots.Save ("custom-chord-editor");
       Send (Up_Press);
       Check (Selected_Notes (Prog, 1)(0) = Before (0) + 1,
              "A on the chord's Custom option opens its note editor");
@@ -436,7 +437,8 @@ package body WNM.Project.CFW_Tests is
          --  Instrument tracks are flexible; reserved FX/MIDI roles are fixed.
          for M in Track_Mode_Kind loop
             G_Project.Tracks (Track).Mode := M;
-            Check (Mode (Track) = Normalize_Mode (Track, M), "selectable mode");
+            Check (Mode (Track) = Normalize_Mode (Track, M),
+                   "selectable mode");
             Synchronize_Synth_Settings (Track);
             Drain;
          end loop;
@@ -473,7 +475,8 @@ package body WNM.Project.CFW_Tests is
       G_Project.Tracks (T).Arp_Notes := Chord;
       G_Project.Tracks (T).Arp_Mode := Up;
       WNM.Song_Start_Broadcast.Broadcast;
-      Check (Chord_Sequencer.Current_Chord = Notes, "custom progression playback");
+      Check (Chord_Sequencer.Current_Chord = Notes,
+             "custom progression playback");
       Arpeggiator.Signal_Start_Of_Pattern (T);
       for Key of Notes loop
          Check (Arpeggiator.Next_Note (T) = Key, "arp follows custom chord");
@@ -487,8 +490,8 @@ package body WNM.Project.CFW_Tests is
       Drain;
       G_Project.Tracks (T).Record_Quantize := True;
       Step_Sequencer.Record_Note (63, 100, Time.Clock + 62_500);
-      Check (G_Project.Steps (T)(1)(1).Note = 63 and
-             G_Project.Steps (T)(1)(1).Trig = Always and
+      Check (G_Project.Steps (T)(1)(1).Note = 63 and then
+             G_Project.Steps (T)(1)(1).Trig = Always and then
              G_Project.Steps (T)(1)(1).Timing = 0,
              "quantized live recording follows playhead");
       G_Project.Tracks (T).Record_Quantize := False;
@@ -498,18 +501,18 @@ package body WNM.Project.CFW_Tests is
       WNM.Song_Stop_Broadcast.Broadcast;
       Drain;
       Result := Storage.Save ("cfw-v2", Size);
-      Check (Result = File_System.Ok and Size > 0, "save v2 project");
+      Check (Result = File_System.Ok and then Size > 0, "save v2 project");
       Clear;
       Drain;
       Result := Storage.Load ("cfw-v2", Size);
       Check (Result = File_System.Ok, "load v2 project");
       Check (Selected_Notes (Prog, 1) = Notes, "custom chord round trip");
-      Check (G_Project.Tracks (T).Arp_Keys (2) = 72 and
+      Check (G_Project.Tracks (T).Arp_Keys (2) = 72 and then
              not Record_Quantize (T), "arp/record settings round trip");
       Check (G_Project.Steps (T)(1)(1).Timing = 64, "timing round trip");
       Drain;
 
-      --  Minimal stock-format fixture: track 1 is internal kick, track 16 MIDI.
+      --  Stock-format fixture: track 1 is internal kick, track 16 is MIDI.
       Output.Open ("cfw-v1");
       Put (Output, 1);
       for Track in Tracks loop
@@ -520,8 +523,8 @@ package body WNM.Project.CFW_Tests is
       Put (Output, 254);
       File_System.Close;
       Result := Storage.Load ("cfw-v1", Size);
-      Check (Result = File_System.Ok and Mode (1) = Kick_Mode and
-             Mode (8) = Sample_Mode and Mode (16) = MIDI_Mode,
+      Check (Result = File_System.Ok and then Mode (1) = Kick_Mode and then
+             Mode (8) = Sample_Mode and then Mode (16) = MIDI_Mode,
              "stock project mode migration");
       Drain;
       --  Early custom builds used the old second-sampler ID in v2 projects.

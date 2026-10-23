@@ -98,7 +98,8 @@ package body WNM.Project.Arpeggiator is
                     when Pattern2 => Arp_Pat2'Access,
                     when others => Arp_Pat3'Access);
             begin
-               Index := Natural (Pat (Arp.Next_Index mod Pat'Length)) mod Count;
+               Index :=
+                 Natural (Pat (Arp.Next_Index mod Pat'Length)) mod Count;
             end;
       end case;
       --  Keep the counter bounded during indefinitely looping performances.

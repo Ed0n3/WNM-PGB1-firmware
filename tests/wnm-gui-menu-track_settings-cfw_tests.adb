@@ -2,7 +2,6 @@ with Ada.Text_IO;
 with WNM.Tasks;
 with WNM.Synth;
 with WNM.Screen;
-with Test_Screenshots;
 
 package body WNM.GUI.Menu.Track_Settings.CFW_Tests is
    procedure Check (Condition : Boolean; Message : String) is
@@ -46,9 +45,6 @@ package body WNM.GUI.Menu.Track_Settings.CFW_Tests is
                    "Track Mode must be page 2 for every instrument family");
             WNM.Screen.Clear;
             Draw (View);
-            if M = Project.Sample_Mode then
-               Test_Screenshots.Save ("track-mode-page-2");
-            end if;
             On_Event (View, (Kind => Left_Press));
             Check (Top_Setting_Position (To_Top (View.Current_Setting), M) = 0,
                    "left from Track Mode returns to page 1");

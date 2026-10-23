@@ -2,10 +2,13 @@ name: Custom firmware regression tests
 on: [push, pull_request, workflow_dispatch]
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Keep CSFML compatible with the ASFML 2.6 bindings.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: alire-project/setup-alire@v5
+        with:
+          version: '2.1.1'
       - run: sudo apt-get update && sudo apt-get install -y libcsfml-dev librtmidi-dev librtaudio-dev xvfb
       - working-directory: simulator
         run: alr build

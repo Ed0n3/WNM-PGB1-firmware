@@ -15,7 +15,9 @@ jobs:
 
     - uses: actions/setup-python@v6
 
-    - run: sudo apt install cairosvg librsvg2-bin imagemagick inkscape latexmk texlive-latex-extra
+    - run: |
+        sudo apt-get update
+        sudo apt-get install -y cairosvg librsvg2-bin imagemagick inkscape latexmk texlive-latex-extra
 
     - run: make setup
 

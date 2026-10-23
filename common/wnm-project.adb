@@ -931,19 +931,27 @@ package body WNM.Project is
             return G_Project.Tracks (T).CC (Id).Label;
 
          when Kick_Mode =>
-            Utils.Copy_Str (Synth.Kick_Param_Label (Selected_Engine (T), Tresses_Id), Result);
+            Utils.Copy_Str
+              (Synth.Kick_Param_Label (Selected_Engine (T), Tresses_Id),
+               Result);
             return Result;
 
          when Snare_Mode =>
-            Utils.Copy_Str (Synth.Snare_Param_Label (Selected_Engine (T), Tresses_Id), Result);
+            Utils.Copy_Str
+              (Synth.Snare_Param_Label (Selected_Engine (T), Tresses_Id),
+               Result);
             return Result;
 
          when Hihat_Mode =>
-            Utils.Copy_Str (Synth.Hihat_Param_Label (Selected_Engine (T), Tresses_Id), Result);
+            Utils.Copy_Str
+              (Synth.Hihat_Param_Label (Selected_Engine (T), Tresses_Id),
+               Result);
             return Result;
 
          when Chord_Mode =>
-            Utils.Copy_Str (Synth.Chord_Param_Label (Selected_Engine (T), Tresses_Id), Result);
+            Utils.Copy_Str
+              (Synth.Chord_Param_Label (Selected_Engine (T), Tresses_Id),
+               Result);
             return Result;
 
          when Lead_Mode | Bass_Mode =>
@@ -995,16 +1003,20 @@ package body WNM.Project is
             return G_Project.Tracks (T).CC (Id).Label (1 .. 3);
 
          when Kick_Mode =>
-            return Synth.Kick_Param_Short_Label (Selected_Engine (T), Tresses_Id);
+            return Synth.Kick_Param_Short_Label
+              (Selected_Engine (T), Tresses_Id);
 
          when Snare_Mode =>
-            return Synth.Snare_Param_Short_Label (Selected_Engine (T), Tresses_Id);
+            return Synth.Snare_Param_Short_Label
+              (Selected_Engine (T), Tresses_Id);
 
          when Hihat_Mode =>
-            return Synth.Hihat_Param_Short_Label (Selected_Engine (T), Tresses_Id);
+            return Synth.Hihat_Param_Short_Label
+              (Selected_Engine (T), Tresses_Id);
 
          when Chord_Mode =>
-            return Synth.Chord_Param_Short_Label (Selected_Engine (T), Tresses_Id);
+            return Synth.Chord_Param_Short_Label
+              (Selected_Engine (T), Tresses_Id);
 
          when Lead_Mode | Bass_Mode =>
             return Synth.Lead_Param_Short_Label (Selected_Engine (T),
@@ -1181,7 +1193,8 @@ package body WNM.Project is
    subtype Mode_Choice_Index is Natural range 0 .. 10;
    Mode_Choices : constant array (Mode_Choice_Index) of Track_Mode_Kind :=
      (MIDI_Mode, Sample_Mode, Kick_Mode, Snare_Mode, Hihat_Mode,
-      Bass_Mode, Lead_Mode, Chord_Mode, Reverb_Mode, Drive_Mode, Bitcrush_Mode);
+      Bass_Mode, Lead_Mode, Chord_Mode, Reverb_Mode, Drive_Mode,
+      Bitcrush_Mode);
    package Mode_Choice_Next is new Enum_Next (Mode_Choice_Index);
 
    function Find_Mode_Choice (M : Track_Mode_Kind) return Mode_Choice_Index is
@@ -1252,7 +1265,8 @@ package body WNM.Project is
             begin
                if T in Instrument_Tracks then
                   Mode_Choice_Next.Set
-                    (Choice, V, (Min => 0, Max => Find_Mode_Choice (Chord_Mode)));
+                    (Choice, V,
+                     (Min => 0, Max => Find_Mode_Choice (Chord_Mode)));
                elsif T <= 11 and then V < 0.5 then
                   Choice := Find_Mode_Choice (Default_Mode (T));
                end if;
@@ -1748,7 +1762,8 @@ package body WNM.Project is
             end if;
             Set (Chord.Notes
               (WNM.Chord_Settings.Chord_Index_Range
-                 (Chord_Setting_Kind'Pos (S) - Chord_Setting_Kind'Pos (Note_1))), V);
+                 (Chord_Setting_Kind'Pos (S) -
+                    Chord_Setting_Kind'Pos (Note_1))), V);
       end case;
    end Set;
 
@@ -1780,7 +1795,8 @@ package body WNM.Project is
             end if;
             Next (Chord.Notes
               (WNM.Chord_Settings.Chord_Index_Range
-                 (Chord_Setting_Kind'Pos (S) - Chord_Setting_Kind'Pos (Note_1))));
+                 (Chord_Setting_Kind'Pos (S) -
+                    Chord_Setting_Kind'Pos (Note_1))));
       end case;
    end Next_Value;
 
@@ -1812,7 +1828,8 @@ package body WNM.Project is
             end if;
             Prev (Chord.Notes
               (WNM.Chord_Settings.Chord_Index_Range
-                 (Chord_Setting_Kind'Pos (S) - Chord_Setting_Kind'Pos (Note_1))));
+                 (Chord_Setting_Kind'Pos (S) -
+                    Chord_Setting_Kind'Pos (Note_1))));
       end case;
    end Prev_Value;
 
@@ -1845,7 +1862,8 @@ package body WNM.Project is
             end if;
             Next_Fast (Chord.Notes
               (WNM.Chord_Settings.Chord_Index_Range
-                 (Chord_Setting_Kind'Pos (S) - Chord_Setting_Kind'Pos (Note_1))));
+                 (Chord_Setting_Kind'Pos (S) -
+                    Chord_Setting_Kind'Pos (Note_1))));
       end case;
    end Next_Value_Fast;
 
@@ -1878,7 +1896,8 @@ package body WNM.Project is
             end if;
             Prev_Fast (Chord.Notes
               (WNM.Chord_Settings.Chord_Index_Range
-                 (Chord_Setting_Kind'Pos (S) - Chord_Setting_Kind'Pos (Note_1))));
+                 (Chord_Setting_Kind'Pos (S) -
+                    Chord_Setting_Kind'Pos (Note_1))));
       end case;
    end Prev_Value_Fast;
 
@@ -2762,7 +2781,8 @@ package body WNM.Project is
       Result : Track_Rec := Default_Track;
    begin
       Result.Mode := Default_Mode (T);
-      Result.Chan := (if T in Instrument_Tracks then Voice_MIDI_Chan (T) else 0);
+      Result.Chan :=
+        (if T in Instrument_Tracks then Voice_MIDI_Chan (T) else 0);
       if T = Drive_Track then
          Result.CC (A).Value := 127;
          Result.CC (B).Value := 127;

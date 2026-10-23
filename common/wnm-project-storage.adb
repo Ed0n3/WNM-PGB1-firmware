@@ -518,7 +518,8 @@ package body WNM.Project.Storage is
             when Note_1 .. Note_4 =>
                Output.Push (Out_UInt (Chord.Notes
                  (WNM.Chord_Settings.Chord_Index_Range
-                   (Chord_Setting_Kind'Pos (Set) - Chord_Setting_Kind'Pos (Note_1)))));
+                   (Chord_Setting_Kind'Pos (Set) -
+                      Chord_Setting_Kind'Pos (Note_1)))));
          end case;
          if Output.Status /= Ok then
             return;
@@ -790,7 +791,8 @@ package body WNM.Project.Storage is
                                when 5 => Lead_Mode, when 6 => Chord_Mode,
                                when 7 => Sample1_Mode, when 8 => Sample2_Mode,
                                when 9 => Reverb_Mode, when 10 => Drive_Mode,
-                               when 11 => Bitcrush_Mode, when others => MIDI_Mode));
+                               when 11 => Bitcrush_Mode,
+                               when others => MIDI_Mode));
                      end;
                   else
                      Read (Input, Track.Mode);
@@ -973,7 +975,8 @@ package body WNM.Project.Storage is
             when Note_1 .. Note_4 =>
                Read (Input, Chord.Notes
                  (WNM.Chord_Settings.Chord_Index_Range
-                   (Chord_Setting_Kind'Pos (S) - Chord_Setting_Kind'Pos (Note_1))));
+                   (Chord_Setting_Kind'Pos (S) -
+                      Chord_Setting_Kind'Pos (Note_1))));
          end case;
          exit when Input.Status /= Ok;
       end loop;

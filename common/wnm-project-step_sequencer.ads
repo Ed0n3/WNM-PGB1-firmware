@@ -43,7 +43,6 @@ package WNM.Project.Step_Sequencer is
    --  quantize disabled, retain the onset at 1/128-cell resolution.
    --  While stopped, write the selected step. Monitor the note immediately.
 
-
 private
 
    Current_Playing_Step : Sequencer_Steps := Sequencer_Steps'First with Atomic;
