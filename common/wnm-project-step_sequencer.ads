@@ -36,6 +36,14 @@ package WNM.Project.Step_Sequencer is
 
    function Keyboard_Octave return Octave_Offset;
 
+   procedure Record_Note (Key : MIDI.MIDI_Key;
+                          Velocity : MIDI.MIDI_Data;
+                          Now : Time.Time_Microseconds := Time.Clock);
+   --  Record at the playing track's current sixteenth-note cell. With
+   --  quantize disabled, retain the onset at 1/128-cell resolution.
+   --  While stopped, write the selected step. Monitor the note immediately.
+
+
 private
 
    Current_Playing_Step : Sequencer_Steps := Sequencer_Steps'First with Atomic;

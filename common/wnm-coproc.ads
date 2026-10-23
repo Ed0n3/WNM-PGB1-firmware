@@ -28,14 +28,14 @@ private with Ada.Unchecked_Conversion;
 
 package WNM.Coproc is
 
-   type Message_Kind is (MIDI_Event, Buffer_Available, Synth_CPU_Crash)
+   type Message_Kind is (MIDI_Event, Buffer_Available, Synth_CPU_Crash, Sample_Preview, Voice_Config)
      with Size => 4;
 
    subtype MIDI_Event_Rec is MIDI.Message;
 
    type Message (Kind : Message_Kind := MIDI_Event) is record
       case Kind is
-         when MIDI_Event =>
+         when MIDI_Event | Sample_Preview | Voice_Config =>
             MIDI_Evt : MIDI_Event_Rec;
 
          when Buffer_Available =>

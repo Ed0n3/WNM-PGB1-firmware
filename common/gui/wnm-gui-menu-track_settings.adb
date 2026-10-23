@@ -61,8 +61,12 @@ package body WNM.GUI.Menu.Track_Settings is
        when Project.LFO_Amplitude => LFO,
        when Project.LFO_Shape => LFO,
        when Project.LFO_Target => LFO,
+       when Project.LFO_Amp_Mode | Project.LFO_Loop | Project.LFO_Sync => LFO,
        when Project.Arp_Mode => Arp_Mode,
        when Project.Arp_Notes => Arp_Notes,
+       when Project.Arp_Length => Arp_Length,
+       when Project.Arp_Note => Arp_Note,
+       when Project.Record_Quantize => Record_Quantize,
        when Project.Notes_Per_Chord => Notes_Per_Chord,
        when Project.MIDI_Chan => MIDI_Chan,
        when Project.MIDI_Instrument => MIDI_Instrument,
@@ -85,6 +89,13 @@ package body WNM.GUI.Menu.Track_Settings is
 
    procedure Fix_Current_Setting (This : in out Track_Settings_Menu) is
    begin
+      Editing_Arp_Note := Arp_Note_Index'Min
+        (Editing_Arp_Note, Project.Arp_Length (Editing_Track));
+      if This.Current_Setting = Project.Engine and then
+        not Valid_Setting (Mode (Editing_Track), Project.Engine)
+      then
+         This.Current_Setting := CC_Default_A;
+      end if;
       if not Valid_Setting (Mode (Editing_Track), This.Current_Setting) then
          Prev_Valid_Setting (Mode (Editing_Track), This.Current_Setting);
       end if;
@@ -117,6 +128,38 @@ package body WNM.GUI.Menu.Track_Settings is
       return Natural (Top_Settings_Position_Cache (M, S));
    end Top_Setting_Position;
 
+   --  UI order is independent of the persisted Track_Settings enum IDs.
+   type Settings_Order is array (Positive range 1 .. Sub_Settings'Pos
+                                 (Sub_Settings'Last) + 1) of Sub_Settings;
+
+   function UI_Order (M : Project.Track_Mode_Kind) return Settings_Order is
+      Order : Settings_Order :=
+        (Project.Engine, Project.Track_Mode,
+         CC_Default_A, CC_Default_B, CC_Default_C, CC_Default_D,
+         LFO_Rate, LFO_Amplitude, LFO_Shape, LFO_Target,
+         Project.Volume, Project.Pan, Project.Master_FX,
+         Track_Octave_Offset, Project.Shuffle,
+         Project.Arp_Mode, Project.Arp_Notes, Project.Notes_Per_Chord,
+         Project.MIDI_Chan, Project.MIDI_Instrument,
+         Project.CC_Ctrl_A, Project.CC_Label_A,
+         Project.CC_Ctrl_B, Project.CC_Label_B,
+         Project.CC_Ctrl_C, Project.CC_Label_C,
+         Project.CC_Ctrl_D, Project.CC_Label_D,
+         LFO_Amp_Mode, LFO_Loop, LFO_Sync,
+         Project.Arp_Length, Project.Arp_Note, Project.Record_Quantize);
+   begin
+      if not Valid_Setting (M, Project.Engine) then
+         --  MIDI and FX have no engine page; their defaults page comes first.
+         Order (1) := CC_Default_A;
+         Order (2) := CC_Default_B;
+         Order (3) := CC_Default_C;
+         Order (4) := CC_Default_D;
+         Order (5) := Project.Track_Mode;
+         Order (6) := Project.Engine;
+      end if;
+      return Order;
+   end UI_Order;
+
    ------------------------
    -- Next_Valid_Setting --
    ------------------------
@@ -124,19 +167,19 @@ package body WNM.GUI.Menu.Track_Settings is
    procedure Next_Valid_Setting (M : Project.Track_Mode_Kind;
                                  S : in out Sub_Settings)
    is
-      Result : Sub_Settings := S;
+      Order : constant Settings_Order := UI_Order (M);
    begin
-      while Result /= Sub_Settings'Last loop
-         Result := Sub_Settings'Succ (Result);
-         if Valid_Setting (M, Result) then
-            S := Result;
+      for I in Order'Range loop
+         if Order (I) = S then
+            for J in I + 1 .. Order'Last loop
+               if Valid_Setting (M, Order (J)) then
+                  S := Order (J);
+                  return;
+               end if;
+            end loop;
             return;
          end if;
       end loop;
-
-      if Valid_Setting (M, Result) then
-         S := Result;
-      end if;
    end Next_Valid_Setting;
 
    ------------------------
@@ -146,19 +189,19 @@ package body WNM.GUI.Menu.Track_Settings is
    procedure Prev_Valid_Setting (M : Project.Track_Mode_Kind;
                                  S : in out Sub_Settings)
    is
-      Result : Sub_Settings := S;
+      Order : constant Settings_Order := UI_Order (M);
    begin
-      while Result /= Sub_Settings'First loop
-         Result := Sub_Settings'Pred (Result);
-         if Valid_Setting (M, Result) then
-            S := Result;
+      for I in Order'Range loop
+         if Order (I) = S then
+            for J in reverse Order'First .. I - 1 loop
+               if Valid_Setting (M, Order (J)) then
+                  S := Order (J);
+                  return;
+               end if;
+            end loop;
             return;
          end if;
       end loop;
-
-      if Valid_Setting (M, Result) then
-         S := Result;
-      end if;
    end Prev_Valid_Setting;
 
    --------------
@@ -207,6 +250,16 @@ package body WNM.GUI.Menu.Track_Settings is
                      Count => Top_Settings_Count (Mode),
                      Index => Top_Setting_Position (Top, Mode));
       case Top is
+         when Arp_Length =>
+            Draw_Title ("Custom arp length:", "");
+            Draw_Value (Project.Arp_Length (T)'Img);
+         when Arp_Note =>
+            Draw_Title ("Custom arp note" & Editing_Arp_Note'Img,
+                        "A/B: select note");
+            Draw_Value (Key_Img (Project.Arp_Note (T, Editing_Arp_Note)));
+         when Record_Quantize =>
+            Draw_Title ("Live record quantize:", "");
+            Draw_Value (if Project.Record_Quantize (T) then "On" else "Off");
          when Track_Mode =>
             Draw_Title ("Track mode:", "");
             Draw_Value (Img (Mode));
@@ -220,7 +273,7 @@ package body WNM.GUI.Menu.Track_Settings is
 
                M : constant Project.Track_Mode_Kind := Project.Mode (T);
                Chan : constant MIDI.MIDI_Channel :=
-                 Project.Voice_MIDI_Chan (M);
+                 Project.Voice_MIDI_Chan (T);
             begin
                Draw_Title ("Volume:", "");
                Draw_Str (Box_Center.X - 11, Value_Text_Y,
@@ -246,7 +299,7 @@ package body WNM.GUI.Menu.Track_Settings is
 
                M : constant Project.Track_Mode_Kind := Project.Mode (T);
                Chan : constant MIDI.MIDI_Channel :=
-                 Project.Voice_MIDI_Chan (M);
+                 Project.Voice_MIDI_Chan (T);
             begin
                Draw_Title ("Pan:", "");
                Draw_Str (Box_Center.X - 8, Value_Text_Y,
@@ -379,7 +432,7 @@ package body WNM.GUI.Menu.Track_Settings is
             declare
                M : constant Project.Track_Mode_Kind := Project.Mode (T);
                Chan : constant MIDI.MIDI_Channel :=
-                 Project.Voice_MIDI_Chan (M);
+                 Project.Voice_MIDI_Chan (T);
             begin
                if M in Project.Synth_Track_Mode_Kind
                  and then
@@ -403,7 +456,7 @@ package body WNM.GUI.Menu.Track_Settings is
                   LFO_Target := Project.LFO_Target (T);
                   LFO_Value := Tresses.Param_MIDI
                     (WNM.Synth.Param_Value_After_LFO
-                       (Project.Voice_MIDI_Chan (Mode)));
+                       (Project.Voice_MIDI_Chan (T)));
                end if;
 
                Draw_CC_Control_Page
@@ -454,6 +507,18 @@ package body WNM.GUI.Menu.Track_Settings is
    is
       T : constant Tracks := Editing_Track;
    begin
+      if This.Current_Setting = Project.Arp_Note then
+         if Event.Kind = A_Press then
+            Editing_Arp_Note := Editing_Arp_Note mod Project.Arp_Length (Editing_Track) + 1;
+            return;
+         elsif Event.Kind = B_Press then
+            Editing_Arp_Note := (if Editing_Arp_Note <= 1 then
+                                  Project.Arp_Length (Editing_Track)
+                                else Editing_Arp_Note - 1);
+            return;
+         end if;
+      end if;
+
       This.Fix_Current_Setting;
 
       case Event.Kind is
@@ -627,10 +692,12 @@ begin
 
       declare
          Cnt : Interfaces.Integer_8 := 0;
+         Seen : array (Top_Settings) of Boolean := (others => False);
       begin
-         for Top in Top_Settings loop
-            if Valid_Top_Settings (Mode, Top) then
-               Top_Settings_Position_Cache (Mode, Top) := Cnt;
+         for Sub of UI_Order (Mode) loop
+            if Valid_Setting (Mode, Sub) and then not Seen (To_Top (Sub)) then
+               Top_Settings_Position_Cache (Mode, To_Top (Sub)) := Cnt;
+               Seen (To_Top (Sub)) := True;
                Cnt := Cnt + 1;
             end if;
          end loop;

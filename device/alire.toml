@@ -1,6 +1,6 @@
 name = "wnm_pgb1_device"
 description = "Firmware for the PGB-1 groovebox"
-version = "0.1.0-dev"
+version = "0.1.0-cfw.5"
 
 authors = ["Fabien Chouteau"]
 maintainers = ["Fabien Chouteau <fabien.chouteau@gmail.com>"]
@@ -20,8 +20,8 @@ midi = "~1.0.0"
 release.runtime_checks = "none"
 
 [[pins]]
-tresses = {url="https://github.com/wee-noise-makers/tresses", branch="release/4.0"}
-noise_nugget_sdk = {url="https://github.com/wee-noise-makers/noise-nugget-ada-sdk", branch="release/2.1"}
+tresses = {url="https://github.com/wee-noise-makers/tresses", commit="42149a2496b5361abd0605b81db33a305e97f307"}
+noise_nugget_sdk = {url="https://github.com/wee-noise-makers/noise-nugget-ada-sdk", commit="717b0e81c1f5016a74ec664d8976b749a07312ad"}
 # tresses = { path = "../../tresses"}
 # noise_nugget_sdk = { path = "../../noise-nugget-ada-sdk"}
 

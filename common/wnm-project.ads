@@ -194,7 +194,8 @@ package WNM.Project is
                           CC_C,
                           CC_D,
                           Note_Mode,
-                          Octave_Shift);
+                          Octave_Shift,
+                          Timing);
 
    for Step_Settings'Size use 8;
    for Step_Settings use (Condition    => 0,
@@ -208,7 +209,8 @@ package WNM.Project is
                           CC_C         => 8,
                           CC_D         => 9,
                           Note_Mode    => 10,
-                          Octave_Shift => 11);
+                          Octave_Shift => 11,
+                          Timing       => 12);
 
    subtype User_Step_Settings is Step_Settings range Condition .. CC_D;
 
@@ -222,15 +224,14 @@ package WNM.Project is
    -- Track --
    -----------
 
-   type Track_Mode_Kind is (MIDI_Mode, Sample1_Mode, Sample2_Mode,
-                            Kick_Mode, Snare_Mode, Hihat_Mode,
-                            Bass_Mode, Lead_Mode, Chord_Mode, Reverb_Mode,
-                            Drive_Mode, Bitcrush_Mode);
+   type Track_Mode_Kind is new Synth.Voice_Kind;
+   subtype Instrument_Tracks is Tracks range 1 .. 8;
+   --  Both historical sample mode IDs load as this single per-track mode.
+   Sample_Mode : constant Track_Mode_Kind := Sample1_Mode;
 
    function Img (M : Track_Mode_Kind) return String
    is (case M is
-          when Sample1_Mode  => "Sample 1",
-          when Sample2_Mode  => "Sample 2",
+          when Sample1_Mode | Sample2_Mode => "Sample",
           when MIDI_Mode     => "MIDI",
           when Kick_Mode     => "Kick",
           when Snare_Mode    => "Snare",
@@ -245,27 +246,22 @@ package WNM.Project is
    subtype Synth_Track_Mode_Kind is
      Track_Mode_Kind range Sample1_Mode .. Bitcrush_Mode;
 
-   function Voice_MIDI_Chan (Voice : Synth_Track_Mode_Kind)
-                             return MIDI.MIDI_Channel
-   is (case Voice is
-          when Sample1_Mode  => Synth.Sample1_Channel,
-          when Sample2_Mode  => Synth.Sample2_Channel,
-          when Kick_Mode     => Synth.Kick_Channel,
-          when Snare_Mode    => Synth.Snare_Channel,
-          when Hihat_Mode    => Synth.Hihat_Channel,
-          when Bass_Mode     => Synth.Bass_Channel,
-          when Lead_Mode     => Synth.Lead_Channel,
-          when Chord_Mode    => Synth.Chord_Channel,
-          when Reverb_Mode   => Synth.Reverb_Channel,
-          when Drive_Mode    => Synth.Drive_Channel,
-          when Bitcrush_Mode => Synth.Bitcrusher_Channel);
+   --  Internal channels identify tracks, independently of the selected voice.
+   function Voice_MIDI_Chan (T : Tracks) return MIDI.MIDI_Channel
+   is (MIDI.MIDI_Channel (T - Tracks'First));
 
    subtype Controller_Label is String (1 .. 17);
    Empty_Controller_Label : constant Controller_Label := (others => ' ');
 
    type Arp_Mode_Kind is (Up, Down, Up_Down, Pattern1, Pattern2, Pattern3,
                           Random);
-   type Arp_Notes_Kind is (Chord);
+   type Arp_Notes_Kind is (Chord, Custom);
+   subtype Arp_Note_Index is Positive range 1 .. 16;
+   type Arp_Note_Array is array (Arp_Note_Index) of MIDI.MIDI_Key;
+   Editing_Arp_Note : Arp_Note_Index := 1;
+   function Arp_Length (T : Tracks) return Arp_Note_Index;
+   function Arp_Note (T : Tracks; Id : Arp_Note_Index) return MIDI.MIDI_Key;
+   function Record_Quantize (T : Tracks) return Boolean;
 
    function Img (M : Arp_Mode_Kind) return String
    is (case M is
@@ -279,7 +275,8 @@ package WNM.Project is
 
    function Img (N : Arp_Notes_Kind) return String
    is (case N is
-          when Chord => "Notes of chord");
+          when Chord => "Notes of chord",
+          when Custom => "Custom notes");
 
    type Octave_Offset is range -8 .. 8;
    function Add_Sat (A, B : Octave_Offset) return Octave_Offset;
@@ -405,7 +402,8 @@ package WNM.Project is
 
                            LFO_Amp_Mode,
                            LFO_Loop,
-                           LFO_Sync);
+                           LFO_Sync,
+                           Arp_Length, Arp_Note, Record_Quantize);
 
    for Track_Settings'Size use 8;
    for Track_Settings use (Engine              => 1,
@@ -438,10 +436,13 @@ package WNM.Project is
                            Track_Mode          => 28,
                            LFO_Amp_Mode        => 29,
                            LFO_Loop            => 30,
-                           LFO_Sync            => 31);
+                           LFO_Sync            => 31,
+                           Arp_Length          => 32,
+                           Arp_Note            => 33,
+                           Record_Quantize     => 34);
 
    subtype User_Track_Settings
-     is Track_Settings range Engine .. Track_Mode;
+     is Track_Settings range Engine .. Record_Quantize;
 
    procedure Set (T : Tracks;
                   S : User_Track_Settings;
@@ -497,14 +498,25 @@ package WNM.Project is
 
    type Chord_Setting_Kind is (Tonic,
                                Name,
-                               Duration);
+                               Duration,
+                               Custom_Chord,
+                               Note_1, Note_2, Note_3, Note_4);
 
    for Chord_Setting_Kind'Size use 8;
    for Chord_Setting_Kind use (Tonic    => 0,
                                Name     => 1,
-                               Duration => 2);
+                               Duration => 2,
+                               Custom_Chord => 3,
+                               Note_1 => 4, Note_2 => 5,
+                               Note_3 => 6, Note_4 => 7);
 
-   subtype User_Chord_Settings is Chord_Setting_Kind range Tonic .. Duration;
+   subtype User_Chord_Settings is Chord_Setting_Kind range Tonic .. Note_4;
+
+   function Selected_Custom (C : WNM.Chord_Progressions;
+                             Id : Chord_Slot_Id) return Boolean;
+   function Selected_Notes (C : WNM.Chord_Progressions;
+                            Id : Chord_Slot_Id)
+                            return WNM.Chord_Settings.Chord_Notes;
 
    -- Chord Getters --
 
@@ -542,7 +554,7 @@ package WNM.Project is
                               Id : Chord_Slot_Id;
                               S  : User_Chord_Settings);
 
-   type Scale_Choice is (Random, Major, Minor, Modal);
+   type Scale_Choice is (Random, Major, Minor, Modal, Custom);
    type Key_Choice is (Random, C, Cs, D, Ds, E, F, Fs, G, Gs, A, As, B);
    procedure Randomly_Pick_A_Progression (Prog_Id : WNM.Chord_Progressions;
                                           Scale_C : Scale_Choice;
@@ -755,6 +767,24 @@ package WNM.Project is
 
 private
 
+   function Canonical_Mode (M : Track_Mode_Kind) return Track_Mode_Kind
+   is (if M = Sample2_Mode then Sample_Mode else M);
+   function Default_Mode (T : Tracks) return Track_Mode_Kind
+   is (case T is
+          when Instrument_Tracks => Lead_Mode,
+          when 9 => Reverb_Mode,
+          when 10 => Drive_Mode,
+          when 11 => Bitcrush_Mode,
+          when others => MIDI_Mode);
+   function Mode_Allowed (T : Tracks; M : Track_Mode_Kind) return Boolean
+   is (if T in Instrument_Tracks then M in MIDI_Mode .. Chord_Mode
+       else M = MIDI_Mode or else M = Default_Mode (T));
+   function Normalize_Mode (T : Tracks; M : Track_Mode_Kind)
+                            return Track_Mode_Kind
+   is (if Mode_Allowed (T, M) then Canonical_Mode (M) else Default_Mode (T));
+   package Arp_Index_Next is new Enum_Next (Arp_Note_Index, Wrap => False);
+   use Arp_Index_Next;
+
    type Global_Settings is (BPM);
    for Global_Settings use (BPM => 0);
 
@@ -802,9 +832,6 @@ private
    package Arp_Notes_Next is new Enum_Next (Arp_Notes_Kind);
    use Arp_Notes_Next;
 
-   package Chord_Name_Next is new Enum_Next (WNM.Chord_Settings.Chord_Name);
-   use Chord_Name_Next;
-
    package Notes_Per_Chord_Next
    is new Enum_Next (Chord_Settings.Chord_Index_Range, Wrap => False);
    use Notes_Per_Chord_Next;
@@ -848,7 +875,7 @@ private
    use Pattern_Length_Next;
 
    type CC_Val_Array is array (CC_Id) of MIDI.MIDI_Data;
-   type CC_Ena_Array is array (CC_Id) of Boolean;
+   type CC_Ena_Array is array (CC_Id) of Boolean with Pack;
 
    for Octave_Offset'Size use 5;
    package Octave_Offset_Next is new Enum_Next (T    => Octave_Offset,
@@ -873,6 +900,7 @@ private
       Oct       : Octave_Offset;
       Duration  : Note_Duration;
       Velo      : MIDI.MIDI_Data;
+      Timing    : MIDI.MIDI_Data; --  Onset in 1/128 of a sixteenth note
       CC_Ena    : CC_Ena_Array;
       CC_Val    : CC_Val_Array;
    end record
@@ -887,6 +915,7 @@ private
       Oct => 0,
       Duration => N_16th,
       Velo => MIDI.MIDI_Data'Last,
+      Timing => 0,
       CC_Ena => (others => False),
       CC_Val => (others => 0));
 
@@ -927,7 +956,7 @@ private
    type CC_Setting_Array is array (CC_Id) of CC_Setting;
 
    type Track_Rec is record
-      MIDI_Enabled : Boolean := False;
+      Mode : Track_Mode_Kind := Lead_Mode;
       Chan : MIDI.MIDI_Channel := 0;
       Volume : Audio_Volume := Init_Volume;
       Pan : Audio_Pan := Init_Pan;
@@ -945,9 +974,14 @@ private
       Engine : MIDI.MIDI_Data := 0;
       Arp_Mode : Arp_Mode_Kind := Arp_Mode_Kind'First;
       Arp_Notes : Arp_Notes_Kind := Arp_Notes_Kind'First;
+      Arp_Length : Arp_Note_Index := 4;
+      Arp_Keys : Arp_Note_Array :=
+        (1 => MIDI.C4, 2 => MIDI.E4, 3 => MIDI.G4, 4 => MIDI.C5,
+         others => MIDI.C4);
+      Record_Quantize : Boolean := True;
       Notes_Per_Chord : Chord_Settings.Chord_Index_Range :=
         Chord_Settings.Chord_Index_Range'Last;
-   end record;
+   end record with Pack;
 
    Kick_Track     : constant Tracks := 1;
    Snare_Track    : constant Tracks := 2;
@@ -965,7 +999,7 @@ private
    type Track_Arr is array (Tracks) of Track_Rec;
 
    Default_Track : constant Track_Rec :=
-     (MIDI_Enabled => False,
+     (Mode => Lead_Mode,
       Chan => 0,
       Volume => Init_Volume,
       Pan => Init_Pan,
@@ -987,22 +1021,32 @@ private
       Engine => 0,
       Arp_Mode => Arp_Mode_Kind'First,
       Arp_Notes => Arp_Notes_Kind'First,
+      Arp_Length => 4,
+      Arp_Keys => (1 => MIDI.C4, 2 => MIDI.E4, 3 => MIDI.G4,
+                   4 => MIDI.C5, others => MIDI.C4),
+      Record_Quantize => True,
       Notes_Per_Chord => Chord_Settings.Chord_Index_Range'Last
      );
 
    procedure Set_Track_Defaults (Tracks : out Track_Arr);
+   function Default_Track_For (T : WNM.Tracks) return Track_Rec;
 
    type Chord_Rec is record
       Tonic : MIDI.MIDI_Key := MIDI.C4;
       Name  : WNM.Chord_Settings.Chord_Name :=
         WNM.Chord_Settings.Chord_Name'First;
       Duration : Duration_In_Steps := Steps_Per_Bar;
+      Custom : Boolean := False;
+      Notes : WNM.Chord_Settings.Chord_Notes :=
+        (MIDI.C4, MIDI.E4, MIDI.G4, MIDI.C5);
    end record;
 
    Default_Chord : constant Chord_Rec :=
      (Tonic    => MIDI.C4,
       Name     => WNM.Chord_Settings.Chord_Name'First,
-      Duration => 16);
+      Duration => 16,
+      Custom => False,
+      Notes => (MIDI.C4, MIDI.E4, MIDI.G4, MIDI.C5));
 
    type Chord_Arr is array (Chord_Slot_Id) of Chord_Rec;
 
@@ -1088,11 +1132,7 @@ private
 
       Patterns : All_Pattern_Arr := (others => (others => Default_Pattern));
 
-      Steps : All_Steps_Arr :=
-        (Bass_Track  => (others => (others => Default_Step_Bass)),
-         Lead_Track  => (others => (others => Default_Step_Lead)),
-         Chord_Track => (others => (others => Default_Step_Chord)),
-         others      => (others => (others => Default_Step)));
+      Steps : All_Steps_Arr := (others => (others => (others => Default_Step)));
 
       Parts : Song_Part_Arr;
 

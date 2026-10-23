@@ -528,7 +528,7 @@ package body WNM.Project is
         and then
           Id = A
         and then
-          not G_Project.Tracks (T).MIDI_Enabled
+          Mode (T) /= MIDI_Mode
       then
          --  Special case for sample section
          Sample_Id_Next (CC);
@@ -555,7 +555,7 @@ package body WNM.Project is
         and then
           Id = A
         and then
-          not G_Project.Tracks (T).MIDI_Enabled
+          Mode (T) /= MIDI_Mode
       then
          null;
       else
@@ -577,7 +577,7 @@ package body WNM.Project is
         and then
           Id = A
         and then
-          not G_Project.Tracks (T).MIDI_Enabled
+          Mode (T) /= MIDI_Mode
       then
          --  Special case for sample section
          Sample_Id_Prev (CC);
@@ -771,27 +771,8 @@ package body WNM.Project is
    -- Mode --
    ----------
 
-   function Mode (T : Tracks) return Track_Mode_Kind is
-   begin
-      if G_Project.Tracks (T).MIDI_Enabled then
-         return MIDI_Mode;
-      else
-         return (case T is
-                    when Kick_Track     => Kick_Mode,
-                    when Snare_Track    => Snare_Mode,
-                    when Cymbal_Track   => Hihat_Mode,
-                    when Bass_Track     => Bass_Mode,
-                    when Lead_Track     => Lead_Mode,
-                    when Sample1_Track  => Sample1_Mode,
-                    when Sample2_Track  => Sample2_Mode,
-                    --  when Speech_Track   => Speech_Mode,
-                    when Chord_Track    => Chord_Mode,
-                    when Reverb_Track   => Reverb_Mode,
-                    when Drive_Track    => Drive_Mode,
-                    when Bitcrush_Track => Bitcrush_Mode,
-                    when others         => MIDI_Mode);
-      end if;
-   end Mode;
+   function Mode (T : Tracks) return Track_Mode_Kind
+   is (Normalize_Mode (T, G_Project.Tracks (T).Mode));
 
    ---------------
    -- MIDI_Chan --
@@ -950,19 +931,19 @@ package body WNM.Project is
             return G_Project.Tracks (T).CC (Id).Label;
 
          when Kick_Mode =>
-            Utils.Copy_Str (Synth.Kick_Param_Label (Tresses_Id), Result);
+            Utils.Copy_Str (Synth.Kick_Param_Label (Selected_Engine (T), Tresses_Id), Result);
             return Result;
 
          when Snare_Mode =>
-            Utils.Copy_Str (Synth.Snare_Param_Label (Tresses_Id), Result);
+            Utils.Copy_Str (Synth.Snare_Param_Label (Selected_Engine (T), Tresses_Id), Result);
             return Result;
 
          when Hihat_Mode =>
-            Utils.Copy_Str (Synth.Hihat_Param_Label (Tresses_Id), Result);
+            Utils.Copy_Str (Synth.Hihat_Param_Label (Selected_Engine (T), Tresses_Id), Result);
             return Result;
 
          when Chord_Mode =>
-            Utils.Copy_Str (Synth.Chord_Param_Label (Tresses_Id), Result);
+            Utils.Copy_Str (Synth.Chord_Param_Label (Selected_Engine (T), Tresses_Id), Result);
             return Result;
 
          when Lead_Mode | Bass_Mode =>
@@ -973,12 +954,12 @@ package body WNM.Project is
 
          when Sample1_Mode =>
             Utils.Copy_Str (Synth.Sampler_Param_Label
-                            (Synth.Sample1_Channel, Tresses_Id), Result);
+                            (Selected_Engine (T), Tresses_Id), Result);
             return Result;
 
          when Sample2_Mode =>
             Utils.Copy_Str (Synth.Sampler_Param_Label
-                            (Synth.Sample2_Channel, Tresses_Id), Result);
+                            (Selected_Engine (T), Tresses_Id), Result);
             return Result;
 
          when Reverb_Mode =>
@@ -1014,16 +995,16 @@ package body WNM.Project is
             return G_Project.Tracks (T).CC (Id).Label (1 .. 3);
 
          when Kick_Mode =>
-            return Synth.Kick_Param_Short_Label (Tresses_Id);
+            return Synth.Kick_Param_Short_Label (Selected_Engine (T), Tresses_Id);
 
          when Snare_Mode =>
-            return Synth.Snare_Param_Short_Label (Tresses_Id);
+            return Synth.Snare_Param_Short_Label (Selected_Engine (T), Tresses_Id);
 
          when Hihat_Mode =>
-            return Synth.Hihat_Param_Short_Label (Tresses_Id);
+            return Synth.Hihat_Param_Short_Label (Selected_Engine (T), Tresses_Id);
 
          when Chord_Mode =>
-            return Synth.Chord_Param_Short_Label (Tresses_Id);
+            return Synth.Chord_Param_Short_Label (Selected_Engine (T), Tresses_Id);
 
          when Lead_Mode | Bass_Mode =>
             return Synth.Lead_Param_Short_Label (Selected_Engine (T),
@@ -1031,11 +1012,11 @@ package body WNM.Project is
 
          when Sample1_Mode =>
             return Synth.Sampler_Param_Short_Label
-              (Synth.Sample1_Channel, Tresses_Id);
+              (Selected_Engine (T), Tresses_Id);
 
          when Sample2_Mode =>
             return Synth.Sampler_Param_Short_Label
-              (Synth.Sample2_Channel, Tresses_Id);
+              (Selected_Engine (T), Tresses_Id);
 
          when Reverb_Mode =>
             return Synth.Reverb_Param_Short_Label (Tresses_Id);
@@ -1099,6 +1080,15 @@ package body WNM.Project is
    -- Notes_Per_Chord --
    ---------------------
 
+   function Arp_Length (T : Tracks) return Arp_Note_Index
+   is (G_Project.Tracks (T).Arp_Length);
+
+   function Arp_Note (T : Tracks; Id : Arp_Note_Index) return MIDI.MIDI_Key
+   is (G_Project.Tracks (T).Arp_Keys (Id));
+
+   function Record_Quantize (T : Tracks) return Boolean
+   is (G_Project.Tracks (T).Record_Quantize);
+
    function Notes_Per_Chord (T : Tracks) return Natural
    is (Natural (G_Project.Tracks (T).Notes_Per_Chord) + 1);
 
@@ -1142,7 +1132,7 @@ package body WNM.Project is
    begin
 
       if Mode (T) in Synth_Track_Mode_Kind then
-         Chan := Voice_MIDI_Chan (Mode (T));
+         Chan := Voice_MIDI_Chan (T);
          CC := CC_For_Track_Setting (S);
 
          if CC = MIDI.MIDI_Data'Last then
@@ -1187,6 +1177,68 @@ package body WNM.Project is
    -- Set --
    ---------
 
+   --  Keep stored mode IDs stable, but expose one Sample choice in the UI.
+   subtype Mode_Choice_Index is Natural range 0 .. 10;
+   Mode_Choices : constant array (Mode_Choice_Index) of Track_Mode_Kind :=
+     (MIDI_Mode, Sample_Mode, Kick_Mode, Snare_Mode, Hihat_Mode,
+      Bass_Mode, Lead_Mode, Chord_Mode, Reverb_Mode, Drive_Mode, Bitcrush_Mode);
+   package Mode_Choice_Next is new Enum_Next (Mode_Choice_Index);
+
+   function Find_Mode_Choice (M : Track_Mode_Kind) return Mode_Choice_Index is
+   begin
+      for I in Mode_Choices'Range loop
+         if Mode_Choices (I) = M then
+            return I;
+         end if;
+      end loop;
+      raise Program_Error;
+   end Find_Mode_Choice;
+
+   function Advance_Mode_Choice (T : Tracks;
+                                 Forward : Boolean;
+                                 Fast : Boolean := False)
+                                 return Mode_Choice_Index
+   is
+      Choice : Mode_Choice_Index := Find_Mode_Choice (Mode (T));
+   begin
+      for I in 1 .. (if Fast then 10 else 1) loop
+         loop
+            Choice := (if Forward then Mode_Choice_Next.Next (Choice)
+                       else Mode_Choice_Next.Prev (Choice));
+            exit when Mode_Allowed (T, Mode_Choices (Choice));
+         end loop;
+      end loop;
+      return Choice;
+   end Advance_Mode_Choice;
+
+   procedure Apply_Mode_Choice (T : Tracks; Choice : Mode_Choice_Index) is
+      use type Sample_Library.Sample_Point_Count;
+      Track : Track_Rec renames G_Project.Tracks (T);
+      New_Mode : constant Track_Mode_Kind :=
+        Normalize_Mode (T, Mode_Choices (Choice));
+   begin
+      if Mode (T) = New_Mode then
+         return;
+      end if;
+      Track.Mode := New_Mode;
+      Track.Engine := 0;
+      if New_Mode = Sample_Mode then
+         --  Synth parameters can select an empty slot or start beyond a short
+         --  sample. Give a newly converted sampler usable playback defaults.
+         Track.CC (A).Value := 0;
+         for Id in Sample_Library.Sample_Index loop
+            if Sample_Library.Entry_Len (Id) > 0 then
+               Track.CC (A).Value := MIDI.MIDI_Data (Id);
+               exit;
+            end if;
+         end loop;
+         Track.CC (B).Value := 0;
+         Track.CC (C).Value := 0;
+         Track.CC (D).Value := 63;
+      end if;
+      Synchronize_Synth_Settings (T);
+   end Apply_Mode_Choice;
+
    procedure Set (T : Tracks;
                   S : User_Track_Settings;
                   V : WNM_HAL.Touch_Value)
@@ -1194,13 +1246,20 @@ package body WNM.Project is
       Track : Track_Rec renames G_Project.Tracks (T);
    begin
       case S is
-         when Track_Mode      => Set (Track.MIDI_Enabled, V);
-            --  Switching from MIDI to synth, update all settings
-            if not Track.MIDI_Enabled then
-               Synchronize_Synth_Settings (T);
-            end if;
+         when Track_Mode =>
+            declare
+               Choice : Mode_Choice_Index := 0;
+            begin
+               if T in Instrument_Tracks then
+                  Mode_Choice_Next.Set
+                    (Choice, V, (Min => 0, Max => Find_Mode_Choice (Chord_Mode)));
+               elsif T <= 11 and then V < 0.5 then
+                  Choice := Find_Mode_Choice (Default_Mode (T));
+               end if;
+               Apply_Mode_Choice (T, Choice);
+            end;
 
-         when Engine          => Set (Track.Engine, V, Engine_Limits);
+         when Engine          => Set (Track.Engine, V, Engine_Limits (T));
          when Volume          => Set (Track.Volume, V);
          when Pan             => Set (Track.Pan, V);
          when Master_FX       => Set (Track.FX, V);
@@ -1212,9 +1271,13 @@ package body WNM.Project is
          when LFO_Target      => Set (Track.LFO_Target, V);
          when Arp_Mode        => Set (Track.Arp_Mode, V);
          when Arp_Notes       => Set (Track.Arp_Notes, V);
+         when Arp_Length      => Set (Track.Arp_Length, V);
+         when Arp_Note        => Set (Track.Arp_Keys (Editing_Arp_Note), V);
+         when Record_Quantize => Set (Track.Record_Quantize, V);
          when Notes_Per_Chord => Set (Track.Notes_Per_Chord, V);
          when MIDI_Chan       => Set (Track.Chan, V);
          when MIDI_Instrument => null;
+         when LFO_Amp_Mode | LFO_Loop | LFO_Sync => null;
          when CC_Default_A    => CC_Set (T, A, Track.CC (A).Value, V);
          when CC_Default_B    => CC_Set (T, B, Track.CC (B).Value, V);
          when CC_Default_C    => CC_Set (T, C, Track.CC (C).Value, V);
@@ -1239,14 +1302,11 @@ package body WNM.Project is
       Track : Track_Rec renames G_Project.Tracks (T);
    begin
       case S is
-         when Track_Mode      =>
-            Next (Track.MIDI_Enabled);
-            --  Switching from MIDI to synth, update all settings
-            if not Track.MIDI_Enabled then
-               Synchronize_Synth_Settings (T);
-            end if;
+         when Track_Mode =>
+            Apply_Mode_Choice
+              (T, Advance_Mode_Choice (T, Forward => True));
 
-         when Engine          => Next (Track.Engine, Engine_Limits);
+         when Engine          => Next (Track.Engine, Engine_Limits (T));
          when Volume          => Next (Track.Volume);
          when Pan             => Next (Track.Pan);
          when Master_FX       => Next (Track.FX);
@@ -1258,9 +1318,13 @@ package body WNM.Project is
          when LFO_Target      => Next (Track.LFO_Target);
          when Arp_Mode        => Next (Track.Arp_Mode);
          when Arp_Notes       => Next (Track.Arp_Notes);
+         when Arp_Length      => Next (Track.Arp_Length);
+         when Arp_Note        => Next (Track.Arp_Keys (Editing_Arp_Note));
+         when Record_Quantize => Next (Track.Record_Quantize);
          when Notes_Per_Chord => Next (Track.Notes_Per_Chord);
          when MIDI_Chan       => Next (Track.Chan);
          when MIDI_Instrument => null;
+         when LFO_Amp_Mode | LFO_Loop | LFO_Sync => null;
          when CC_Default_A    => CC_Next (T, A, Track.CC (A).Value);
          when CC_Default_B    => CC_Next (T, B, Track.CC (B).Value);
          when CC_Default_C    => CC_Next (T, C, Track.CC (C).Value);
@@ -1284,14 +1348,11 @@ package body WNM.Project is
       Track : Track_Rec renames G_Project.Tracks (T);
    begin
       case S is
-         when Track_Mode      =>
-            Prev (Track.MIDI_Enabled);
-            --  Switching from MIDI to synth, update all settings
-            if not Track.MIDI_Enabled then
-               Synchronize_Synth_Settings (T);
-            end if;
+         when Track_Mode =>
+            Apply_Mode_Choice
+              (T, Advance_Mode_Choice (T, Forward => False));
 
-         when Engine          => Prev (Track.Engine, Engine_Limits);
+         when Engine          => Prev (Track.Engine, Engine_Limits (T));
          when Volume          => Prev (Track.Volume);
          when Pan             => Prev (Track.Pan);
          when Master_FX       => Prev (Track.FX);
@@ -1303,9 +1364,13 @@ package body WNM.Project is
          when LFO_Target      => Prev (Track.LFO_Target);
          when Arp_Mode        => Prev (Track.Arp_Mode);
          when Arp_Notes       => Prev (Track.Arp_Notes);
+         when Arp_Length      => Prev (Track.Arp_Length);
+         when Arp_Note        => Prev (Track.Arp_Keys (Editing_Arp_Note));
+         when Record_Quantize => Prev (Track.Record_Quantize);
          when Notes_Per_Chord => Prev (Track.Notes_Per_Chord);
          when MIDI_Chan       => Prev (Track.Chan);
          when MIDI_Instrument => null;
+         when LFO_Amp_Mode | LFO_Loop | LFO_Sync => null;
          when CC_Default_A    => CC_Prev (T, A, Track.CC (A).Value);
          when CC_Default_B    => CC_Prev (T, B, Track.CC (B).Value);
          when CC_Default_C    => CC_Prev (T, C, Track.CC (C).Value);
@@ -1329,14 +1394,11 @@ package body WNM.Project is
       Track : Track_Rec renames G_Project.Tracks (T);
    begin
       case S is
-         when Track_Mode      =>
-            Next_Fast (Track.MIDI_Enabled);
-            --  Switching from MIDI to synth, update all settings
-            if not Track.MIDI_Enabled then
-               Synchronize_Synth_Settings (T);
-            end if;
+         when Track_Mode =>
+            Apply_Mode_Choice
+              (T, Advance_Mode_Choice (T, Forward => True, Fast => True));
 
-         when Engine          => Next_Fast (Track.Engine, Engine_Limits);
+         when Engine          => Next_Fast (Track.Engine, Engine_Limits (T));
          when Volume          => Next_Fast (Track.Volume);
          when Pan             => Next_Fast (Track.Pan);
          when Master_FX       => Next_Fast (Track.FX);
@@ -1348,9 +1410,13 @@ package body WNM.Project is
          when LFO_Target      => Next_Fast (Track.LFO_Target);
          when Arp_Mode        => Next_Fast (Track.Arp_Mode);
          when Arp_Notes       => Next_Fast (Track.Arp_Notes);
+         when Arp_Length      => Next_Fast (Track.Arp_Length);
+         when Arp_Note        => Next_Fast (Track.Arp_Keys (Editing_Arp_Note));
+         when Record_Quantize => Next_Fast (Track.Record_Quantize);
          when Notes_Per_Chord => Next_Fast (Track.Notes_Per_Chord);
          when MIDI_Chan       => Next_Fast (Track.Chan);
          when MIDI_Instrument => null;
+         when LFO_Amp_Mode | LFO_Loop | LFO_Sync => null;
          when CC_Default_A    => CC_Next (T, A, Track.CC (A).Value, True);
          when CC_Default_B    => CC_Next (T, B, Track.CC (B).Value, True);
          when CC_Default_C    => CC_Next (T, C, Track.CC (C).Value, True);
@@ -1374,14 +1440,11 @@ package body WNM.Project is
       Track : Track_Rec renames G_Project.Tracks (T);
    begin
       case S is
-         when Track_Mode      =>
-            Prev_Fast (Track.MIDI_Enabled);
-            --  Switching from MIDI to synth, update all settings
-            if not Track.MIDI_Enabled then
-               Synchronize_Synth_Settings (T);
-            end if;
+         when Track_Mode =>
+            Apply_Mode_Choice
+              (T, Advance_Mode_Choice (T, Forward => False, Fast => True));
 
-         when Engine          => Prev_Fast (Track.Engine, Engine_Limits);
+         when Engine          => Prev_Fast (Track.Engine, Engine_Limits (T));
          when Volume          => Prev_Fast (Track.Volume);
          when Pan             => Prev_Fast (Track.Pan);
          when Master_FX       => Prev_Fast (Track.FX);
@@ -1393,9 +1456,13 @@ package body WNM.Project is
          when LFO_Target      => Prev_Fast (Track.LFO_Target);
          when Arp_Mode        => Prev_Fast (Track.Arp_Mode);
          when Arp_Notes       => Prev_Fast (Track.Arp_Notes);
+         when Arp_Length      => Prev_Fast (Track.Arp_Length);
+         when Arp_Note        => Prev_Fast (Track.Arp_Keys (Editing_Arp_Note));
+         when Record_Quantize => Prev_Fast (Track.Record_Quantize);
          when Notes_Per_Chord => Prev_Fast (Track.Notes_Per_Chord);
          when MIDI_Chan       => Prev_Fast (Track.Chan);
          when MIDI_Instrument => null;
+         when LFO_Amp_Mode | LFO_Loop | LFO_Sync => null;
          when CC_Default_A    => CC_Prev (T, A, Track.CC (A).Value, True);
          when CC_Default_B    => CC_Prev (T, B, Track.CC (B).Value, True);
          when CC_Default_C    => CC_Prev (T, C, Track.CC (C).Value, True);
@@ -1561,6 +1628,20 @@ package body WNM.Project is
    -- Selected_Tonic --
    --------------------
 
+   function Selected_Custom (C : WNM.Chord_Progressions;
+                             Id : Chord_Slot_Id) return Boolean
+   is (G_Project.Progressions (C).Chords (Id).Custom);
+
+   function Selected_Notes (C : WNM.Chord_Progressions;
+                            Id : Chord_Slot_Id)
+                            return WNM.Chord_Settings.Chord_Notes
+   is
+      use WNM.Chord_Settings;
+      Ch : Chord_Rec renames G_Project.Progressions (C).Chords (Id);
+   begin
+      return (if Ch.Custom then Ch.Notes else Ch.Tonic + Chords (Ch.Name));
+   end Selected_Notes;
+
    function Selected_Tonic (C  : WNM.Chord_Progressions;
                             Id : Chord_Slot_Id)
                             return MIDI.MIDI_Key
@@ -1610,6 +1691,34 @@ package body WNM.Project is
    -- Set --
    ---------
 
+   --  Add Custom to the chord's own preset selector without changing the
+   --  serialized preset enum or the preset interval tables.
+   subtype Chord_Choice_Index is Natural range
+     0 .. Chord_Settings.Chord_Name'Pos (Chord_Settings.Chord_Name'Last) + 1;
+   package Chord_Choice_Next is new Enum_Next (Chord_Choice_Index);
+
+   function Selected_Chord_Choice
+     (C : Chord_Progressions; Id : Chord_Slot_Id) return Chord_Choice_Index
+   is (if Selected_Custom (C, Id) then Chord_Choice_Index'Last
+       else Chord_Settings.Chord_Name'Pos (Selected_Name (C, Id)));
+
+   procedure Apply_Chord_Choice (C : Chord_Progressions;
+                                 Id : Chord_Slot_Id;
+                                 Choice : Chord_Choice_Index)
+   is
+      Chord : Chord_Rec renames G_Project.Progressions (C).Chords (Id);
+   begin
+      if Choice = Chord_Choice_Index'Last then
+         if not Chord.Custom then
+            Chord.Notes := Selected_Notes (C, Id);
+         end if;
+         Chord.Custom := True;
+      else
+         Chord.Name := Chord_Settings.Chord_Name'Val (Choice);
+         Chord.Custom := False;
+      end if;
+   end Apply_Chord_Choice;
+
    procedure Set (C  : WNM.Chord_Progressions;
                   Id : Chord_Slot_Id;
                   S  : User_Chord_Settings;
@@ -1619,8 +1728,27 @@ package body WNM.Project is
    begin
       case S is
          when Tonic    => Set (Chord.Tonic, V);
-         when Name     => Set (Chord.Name, V);
+         when Name =>
+            declare
+               Choice : Chord_Choice_Index := 0;
+            begin
+               Chord_Choice_Next.Set (Choice, V);
+               Apply_Chord_Choice (C, Id, Choice);
+            end;
          when Duration => Set (Chord.Duration, V);
+         when Custom_Chord =>
+            if not Chord.Custom then
+               Chord.Notes := Selected_Notes (C, Id);
+            end if;
+            Set (Chord.Custom, V);
+         when Note_1 .. Note_4 =>
+            if not Chord.Custom then
+               Chord.Notes := Selected_Notes (C, Id);
+               Chord.Custom := True;
+            end if;
+            Set (Chord.Notes
+              (WNM.Chord_Settings.Chord_Index_Range
+                 (Chord_Setting_Kind'Pos (S) - Chord_Setting_Kind'Pos (Note_1))), V);
       end case;
    end Set;
 
@@ -1636,8 +1764,23 @@ package body WNM.Project is
    begin
       case S is
          when Tonic    => Next (Chord.Tonic);
-         when Name     => Next (Chord.Name);
+         when Name =>
+            Apply_Chord_Choice
+              (C, Id, Chord_Choice_Next.Next (Selected_Chord_Choice (C, Id)));
          when Duration => Next (Chord.Duration);
+         when Custom_Chord =>
+            if not Chord.Custom then
+               Chord.Notes := Selected_Notes (C, Id);
+            end if;
+            Next (Chord.Custom);
+         when Note_1 .. Note_4 =>
+            if not Chord.Custom then
+               Chord.Notes := Selected_Notes (C, Id);
+               Chord.Custom := True;
+            end if;
+            Next (Chord.Notes
+              (WNM.Chord_Settings.Chord_Index_Range
+                 (Chord_Setting_Kind'Pos (S) - Chord_Setting_Kind'Pos (Note_1))));
       end case;
    end Next_Value;
 
@@ -1653,8 +1796,23 @@ package body WNM.Project is
    begin
       case S is
          when Tonic    => Prev (Chord.Tonic);
-         when Name     => Prev (Chord.Name);
+         when Name =>
+            Apply_Chord_Choice
+              (C, Id, Chord_Choice_Next.Prev (Selected_Chord_Choice (C, Id)));
          when Duration => Prev (Chord.Duration);
+         when Custom_Chord =>
+            if not Chord.Custom then
+               Chord.Notes := Selected_Notes (C, Id);
+            end if;
+            Prev (Chord.Custom);
+         when Note_1 .. Note_4 =>
+            if not Chord.Custom then
+               Chord.Notes := Selected_Notes (C, Id);
+               Chord.Custom := True;
+            end if;
+            Prev (Chord.Notes
+              (WNM.Chord_Settings.Chord_Index_Range
+                 (Chord_Setting_Kind'Pos (S) - Chord_Setting_Kind'Pos (Note_1))));
       end case;
    end Prev_Value;
 
@@ -1670,8 +1828,24 @@ package body WNM.Project is
    begin
       case S is
          when Tonic    => Next_Fast (Chord.Tonic);
-         when Name     => Next_Fast (Chord.Name);
+         when Name =>
+            Apply_Chord_Choice
+              (C, Id, Chord_Choice_Next.Next_Fast
+                 (Selected_Chord_Choice (C, Id)));
          when Duration => Next_Fast (Chord.Duration);
+         when Custom_Chord =>
+            if not Chord.Custom then
+               Chord.Notes := Selected_Notes (C, Id);
+            end if;
+            Next_Fast (Chord.Custom);
+         when Note_1 .. Note_4 =>
+            if not Chord.Custom then
+               Chord.Notes := Selected_Notes (C, Id);
+               Chord.Custom := True;
+            end if;
+            Next_Fast (Chord.Notes
+              (WNM.Chord_Settings.Chord_Index_Range
+                 (Chord_Setting_Kind'Pos (S) - Chord_Setting_Kind'Pos (Note_1))));
       end case;
    end Next_Value_Fast;
 
@@ -1687,8 +1861,24 @@ package body WNM.Project is
    begin
       case S is
          when Tonic =>    Prev_Fast (Chord.Tonic);
-         when Name  =>    Prev_Fast (Chord.Name);
+         when Name =>
+            Apply_Chord_Choice
+              (C, Id, Chord_Choice_Next.Prev_Fast
+                 (Selected_Chord_Choice (C, Id)));
          when Duration => Prev_Fast (Chord.Duration);
+         when Custom_Chord =>
+            if not Chord.Custom then
+               Chord.Notes := Selected_Notes (C, Id);
+            end if;
+            Prev_Fast (Chord.Custom);
+         when Note_1 .. Note_4 =>
+            if not Chord.Custom then
+               Chord.Notes := Selected_Notes (C, Id);
+               Chord.Custom := True;
+            end if;
+            Prev_Fast (Chord.Notes
+              (WNM.Chord_Settings.Chord_Index_Range
+                 (Chord_Setting_Kind'Pos (S) - Chord_Setting_Kind'Pos (Note_1))));
       end case;
    end Prev_Value_Fast;
 
@@ -1732,6 +1922,8 @@ package body WNM.Project is
          when Modal =>
             Scale := Major_Scale;
             Use_Modal := True;
+         when Custom =>
+            return;
       end case;
 
       case Key_C is
@@ -1773,6 +1965,7 @@ package body WNM.Project is
          for Chord of Collection.all (Index).all loop
             Prog.Chords (C_Id).Tonic := Tonic (Chord, Key, Scale);
             Prog.Chords (C_Id).Name := Chord.Harmonic_Function;
+            Prog.Chords (C_Id).Custom := False;
             Prog.Chords (C_Id).Duration := Steps_Per_Bar;
             Prog.Len := C_Id;
             C_Id := @ + 1;
@@ -1977,6 +2170,13 @@ package body WNM.Project is
 
    procedure Synchronize_Synth_Settings (T : Tracks) is
    begin
+      Coproc.Push_To_Synth
+        ((Kind => Coproc.Voice_Config,
+          MIDI_Evt => (Kind => MIDI.Continous_Controller,
+                       Chan => Voice_MIDI_Chan (T),
+                       Controller => Synth.Voice_Kind_CC,
+                       Controller_Value => Track_Mode_Kind'Pos (Mode (T)))));
+
       for S in Track_Settings loop
          Synchronize_Synth_Setting (T, S);
       end loop;
@@ -1999,23 +2199,7 @@ package body WNM.Project is
       G_Project.Patterns := (others => (others => Default_Pattern));
 
       for T in Tracks loop
-         case T is
-            when Bass_Track =>
-               G_Project.Steps (T) :=
-                 (others => (others => Default_Step_Bass));
-
-            when Lead_Track =>
-               G_Project.Steps (T) :=
-                 (others => (others => Default_Step_Lead));
-
-            when Chord_Track =>
-               G_Project.Steps (T) :=
-                 (others => (others => Default_Step_Chord));
-
-            when others =>
-               G_Project.Steps (T) :=
-                 (others => (others => Default_Step));
-         end case;
+         G_Project.Steps (T) := (others => (others => Default_Step));
       end loop;
 
       G_Project.Parts := (others => <>);
@@ -2058,14 +2242,18 @@ package body WNM.Project is
       begin
          case Mode (Editing_Track) is
          when Synth_Track_Mode_Kind =>
-            New_Msg.Chan := Voice_MIDI_Chan (Mode (Editing_Track));
+            New_Msg.Chan := Voice_MIDI_Chan (Editing_Track);
 
          when MIDI_Mode =>
             New_Msg.Chan := MIDI_Chan (Editing_Track);
          end case;
 
-         WNM.Coproc.Push_To_Synth ((Kind => MIDI_Event,
-                                    MIDI_Evt => New_Msg));
+         if Mode (Editing_Track) = MIDI_Mode then
+            WNM_HAL.Send_External (New_Msg);
+         else
+            WNM.Coproc.Push_To_Synth ((Kind => MIDI_Event,
+                                       MIDI_Evt => New_Msg));
+         end if;
       end Send_To_Synth;
 
    begin
@@ -2570,104 +2758,30 @@ package body WNM.Project is
    -- Set_Track_Defaults --
    ------------------------
 
-   procedure Set_Track_Defaults (Tracks : out Track_Arr) is
-      Default_Kick_Track : constant Track_Rec :=
-        (Default_Track with delta
-         Engine => 3,
-         Offset => -4,
-         CC => ((0, 63, "CC0              "),
-                (1, 63, "CC1              "),
-                (2, 15, "CC2              "),
-                (3, 63, "CC3              ")
-               ));
-
-      Default_Snare_Track : constant Track_Rec :=
-        (Default_Track with delta Offset => -1,
-         CC => ((0, 40, "CC0              "),
-                (1, 35, "CC1              "),
-                (2, 50, "CC2              "),
-                (3, 50, "CC3              ")
-               ));
-
-      Default_Cymbal_Track : constant Track_Rec :=
-        (Default_Track with delta Engine => 1,
-         CC => ((0, 127, "CC0              "),
-                (1, 100, "CC1              "),
-                (2, 29, "CC2              "),
-                (3, 15, "CC3              ")
-               ));
-
-      Default_Bass_Track : constant Track_Rec :=
-        (Default_Track with delta Engine => 7,
-         Offset => -2,
-         FX => Reverb,
-         CC => ((0, 63, "CC0              "),
-                (1, 63, "CC1              "),
-                (2, 10, "CC2              "),
-                (3, 63, "CC3              ")
-               ));
-
-      Default_Lead_Track : constant Track_Rec :=
-        (Default_Track with delta Engine => 0,
-         FX => Reverb,
-         CC => ((0, 60, "CC0              "),
-                (1, 40, "CC1              "),
-                (2, 10, "CC2              "),
-                (3, 60, "CC3              ")
-               ));
-
-      Default_Sample1_Track : constant Track_Rec :=
-        (Default_Track with delta CC => ((0, 0, "CC0              "),
-                                         (1, 0, "CC1              "),
-                                         (2, 0, "CC2              "),
-                                         (3, 127, "CC3              ")
-                                        ));
-
-      Default_Sample2_Track : constant Track_Rec :=
-        (Default_Track with delta CC => ((0, 4, "CC0              "),
-                                         (1, 0, "CC1              "),
-                                         (2, 0, "CC2              "),
-                                         (3, 127, "CC3              ")
-                                        ));
-
-      Default_Chord_Track : constant Track_Rec :=
-        (Default_Track with delta CC => ((0, 0, "CC0              "),
-                                         (1, 10, "CC1              "),
-                                         (2, 10, "CC2              "),
-                                         (3, 63, "CC3              ")
-                                        ));
-
-      Default_Bitcrush_Track : constant Track_Rec :=
-        (Default_Track with delta CC => ((0, 70, "CC0              "),
-                                         (1, 30, "CC1              "),
-                                         (2, 127, "CC2              "),
-                                         (3, 127, "CC3              ")
-                                        ));
-
-      Default_Overdrive_Track : constant Track_Rec :=
-        (Default_Track with delta CC => ((0, 127, "CC0              "),
-                                         (1, 127, "CC1              "),
-                                         (2, 63, "CC2              "),
-                                         (3, 31, "CC3              ")
-                                        ));
-
+   function Default_Track_For (T : WNM.Tracks) return Track_Rec is
+      Result : Track_Rec := Default_Track;
    begin
-      Tracks (Kick_Track)     := Default_Kick_Track;
-      Tracks (Snare_Track)    := Default_Snare_Track;
-      Tracks (Cymbal_Track)   := Default_Cymbal_Track;
-      Tracks (Bass_Track)     := Default_Bass_Track;
-      Tracks (Lead_Track)     := Default_Lead_Track;
-      Tracks (Chord_Track)    := Default_Chord_Track;
-      Tracks (Sample1_Track)  := Default_Sample1_Track;
-      Tracks (Sample2_Track)  := Default_Sample2_Track;
-      Tracks (9)              := Default_Track;
-      Tracks (Drive_Track)    := Default_Overdrive_Track;
-      Tracks (Bitcrush_Track) := Default_Bitcrush_Track;
-      Tracks (12)             := Default_Track;
-      Tracks (13)             := Default_Track;
-      Tracks (14)             := Default_Track;
-      Tracks (15)             := Default_Track;
-      Tracks (16)             := Default_Track;
+      Result.Mode := Default_Mode (T);
+      Result.Chan := (if T in Instrument_Tracks then Voice_MIDI_Chan (T) else 0);
+      if T = Drive_Track then
+         Result.CC (A).Value := 127;
+         Result.CC (B).Value := 127;
+         Result.CC (C).Value := 63;
+         Result.CC (D).Value := 31;
+      elsif T = Bitcrush_Track then
+         Result.CC (A).Value := 70;
+         Result.CC (B).Value := 30;
+         Result.CC (C).Value := 127;
+         Result.CC (D).Value := 127;
+      end if;
+      return Result;
+   end Default_Track_For;
+
+   procedure Set_Track_Defaults (Tracks : out Track_Arr) is
+   begin
+      for T in Tracks'Range loop
+         Tracks (T) := Default_Track_For (T);
+      end loop;
    end Set_Track_Defaults;
 
 begin

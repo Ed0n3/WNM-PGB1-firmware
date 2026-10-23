@@ -121,6 +121,7 @@ package body WNM.Project.Chord_Sequencer is
    procedure Step_Callback is
    begin
       Next_Step (G_Play_State, G_Roll_State);
+      Update_Current;
 
       if G_Roll_State /= Off then
          --  Keep the saved state going without rolls
@@ -196,16 +197,11 @@ package body WNM.Project.Chord_Sequencer is
 
    procedure Update_Current is
    begin
-      G_Play_State.Tonic :=
-        G_Project.Progressions (G_Play_State.Progression)
-        .Chords (G_Play_State.Chord_Id).Tonic;
-
-      G_Play_State.Chord_Name :=
-        G_Project.Progressions (G_Play_State.Progression)
-        .Chords (G_Play_State.Chord_Id).Name;
-
-      G_Play_State.Chord := G_Play_State.Tonic +
-        WNM.Chord_Settings.Chords (G_Play_State.Chord_Name);
+      G_Play_State.Chord := Selected_Notes
+        (G_Play_State.Progression, G_Play_State.Chord_Id);
+      G_Play_State.Tonic := G_Play_State.Chord (G_Play_State.Chord'First);
+      G_Play_State.Chord_Name := Selected_Name
+        (G_Play_State.Progression, G_Play_State.Chord_Id);
    end Update_Current;
 
 end WNM.Project.Chord_Sequencer;

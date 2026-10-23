@@ -212,7 +212,7 @@ package body WNM.GUI.Menu.System_Info is
       use LED_Dim_Next;
 
       package Synth_Track_Mode_Kind_Next
-      is new Enum_Next (Project.Synth_Track_Mode_Kind);
+      is new Enum_Next (Tracks);
       use Synth_Track_Mode_Kind_Next;
 
       use HAL;

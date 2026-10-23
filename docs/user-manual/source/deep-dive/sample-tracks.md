@@ -1,13 +1,16 @@
 # Sample Tracks
 
-The PGB-1 has two dedicated sample tracks (Tracks 7 and 8) that play audio
-samples instead of synthesized sounds.
+In this custom firmware, every instrument track (1–8) can play samples. Set its track mode
+to **Sample**. Up to eight sample tracks can play simultaneously, sharing the
+eight internal track voices with synth tracks. Each track has independent sample
+selection, playback position and parameters.
+Tracks 9–16 retain their original FX/MIDI roles.
 
 ## Track Default Sample
 
 1. Enter Track Mode ({kbd}`Track`)
-2. Select track 7 or 8
-3. Navigate to the sample selection page (page 2, first parameter)
+2. Select a track from 1–8 and set **Track mode** to **Sample**
+3. Navigate to the sample selection page (first default parameter, **Sample**)
 4. Use {kbd}`↑` / {kbd}`↓` to choose a sample (1-64)
 
 This sets the default sample for the track.

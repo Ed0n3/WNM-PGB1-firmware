@@ -1,6 +1,6 @@
 name = "wnm_pgb1_simulator"
 description = "Simulator of the PGB-1 groovebox"
-version = "0.1.0-dev"
+version = "0.1.0-cfw.5"
 
 authors = ["Fabien Chouteau"]
 maintainers = ["Fabien Chouteau <fabien.chouteau@gmail.com>"]
@@ -9,7 +9,7 @@ maintainers-logins = ["Fabien-Chouteau"]
 executables = ["wnm-pgb1-simulator"]
 
 [[depends-on]]
-asfml = "^2.5.2"
+asfml = "=2.6.1"
 hal = "~1.0.0"
 resources = "~0.1.0"
 littlefs = "~1.0.0"
@@ -22,9 +22,10 @@ uf2_utils = "*"
 midi = "^1.0.0"
 
 [[pins]]
-fsmaker = { url="https://github.com/Fabien-Chouteau/fsmaker" }
-uf2_utils = { url="https://github.com/Fabien-Chouteau/uf2_utils" }
-tresses = {url="https://github.com/wee-noise-makers/tresses", branch="release/4.0"}
+aaa_texts = { url="https://github.com/mosteo/aaa.git", commit="d47bfb2fba7b587509127c7671a67afcb0641c6b", subdir="aaa_texts" }
+fsmaker = { url="https://github.com/Fabien-Chouteau/fsmaker", commit="d1c60ca97aa891d5040918cf0f9bdeecdb7ec914" }
+uf2_utils = { url="https://github.com/Fabien-Chouteau/uf2_utils", commit="58a076c3ea5648eb7b05c3749c46893cf7fc3921" }
+tresses = {url="https://github.com/wee-noise-makers/tresses", commit="42149a2496b5361abd0605b81db33a305e97f307"}
 # tresses = { path = "../../tresses"}
 
 [configuration.values]

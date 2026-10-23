@@ -1,3 +1,6 @@
+with WNM.Fixed_Pools;
+with System.Storage_Elements;
+with Ada.Unchecked_Deallocation;
 -------------------------------------------------------------------------------
 --                                                                           --
 --                              Wee Noise Maker                              --
@@ -42,30 +45,52 @@ package body WNM.Synth is
 
    use type MIDI.MIDI_UInt8;
 
-   TK          : aliased WNM.Voices.Kick_Voice.Instance;
-   TS          : aliased WNM.Voices.Snare_Voice.Instance;
-   HH          : aliased WNM.Voices.Hihat_Voice.Instance;
-   Chord       : aliased WNM.Voices.Chord_Voice.Instance;
-   Sampler1    : aliased WNM.Voices.Sampler_Voice.Instance;
-   Sampler2    : aliased WNM.Voices.Sampler_Voice.Instance;
-
-   Lead_B     : aliased Tresses.Voices.Macro.Macro_Buffers
+   subtype Voice_Slot is Positive range 1 .. Internal_Voice_Count;
+   type Macro_Buffer_Array is array (Voice_Slot) of
+     aliased Tresses.Voices.Macro.Macro_Buffers;
+   Macro_Buffers : Macro_Buffer_Array
      with Import, Address => Shared_Buffers.Shared_Buffer
-       (Shared_Buffers.Lead_Synth_Offset)'Address;
-   Bass_B     : aliased Tresses.Voices.Macro.Macro_Buffers
-     with Import, Address => Shared_Buffers.Shared_Buffer
-       (Shared_Buffers.Bass_Synth_Offset)'Address;
-
-   Lead : aliased Tresses.Voices.Macro.Instance (Lead_B'Access);
-   Bass : aliased Tresses.Voices.Macro.Instance (Bass_B'Access);
+       (Shared_Buffers.Voice_Buffer_Offset)'Address;
 
    pragma Compile_Time_Error
-     (Lead'Size > Shared_Buffers.Lead_Synth_Byte_Size * 8,
-      "Invalid shared buffer size for Lead synth");
+     (Tresses.Voices.Macro.Macro_Buffers'Size >
+        Shared_Buffers.Voice_Buffer_Byte_Size * 8,
+      "Synth voice buffer exceeds its shared-memory slot");
+   --  The array uses the actual component stride, bounded above by the slot
+   --  reservation. No heap allocation occurs on either audio core.
+   type Slot_Rec (B : access Tresses.Voices.Macro.Macro_Buffers;
+                  Kind : Voice_Kind) is record
+      case Kind is
+         when Kick_Mode => TK : aliased WNM.Voices.Kick_Voice.Instance;
+         when Snare_Mode => TS : aliased WNM.Voices.Snare_Voice.Instance;
+         when Hihat_Mode => HH : aliased WNM.Voices.Hihat_Voice.Instance;
+         when Chord_Mode => Chord : aliased WNM.Voices.Chord_Voice.Instance;
+         when Sample1_Mode | Sample2_Mode =>
+            Sampler : aliased WNM.Voices.Sampler_Voice.Instance;
+         when Bass_Mode | Lead_Mode => Lead : aliased Tresses.Voices.Macro.Instance (B);
+         when others => null;
+      end case;
+   end record;
+   --  A fixed storage pool holds eight constrained variant records. This
+   --  avoids both a general-purpose heap and storage for inactive engines.
+   use System.Storage_Elements;
+   Slot_Stride : constant Storage_Count := ((Slot_Rec'Max_Size_In_Storage_Elements + 7) / 8) * 8;
+   Voice_Pool : WNM.Fixed_Pools.Pool
+     (Slot_Stride * Internal_Voice_Count, Internal_Voice_Count);
+   type Slot_Access is access Slot_Rec;
+   for Slot_Access'Simple_Storage_Pool use Voice_Pool;
+   procedure Free is new Ada.Unchecked_Deallocation (Slot_Rec, Slot_Access);
+   Slots : array (Voice_Slot) of Slot_Access := (others => null);
 
-   pragma Compile_Time_Error
-     (Bass'Size > Shared_Buffers.Bass_Synth_Byte_Size * 8,
-      "Invalid shared buffer size for bass synth");
+   subtype Sample_Kind is Voice_Kind range Sample1_Mode .. Sample2_Mode;
+   subtype Macro_Kind is Voice_Kind range Bass_Mode .. Lead_Mode;
+   --  Ages are a permutation; touching a slot moves it to the back of the
+   --  least-recently-played queue without a wrapping timestamp.
+   Ages : array (Voice_Slot) of Natural := (others => 0);
+   Owners : array (Voice_Slot) of Integer := (others => -1);
+   Channel_Slot : array (Tresses_Channels) of Natural := (others => 0);
+   Kinds : array (Tresses_Channels) of Voice_Kind := (others => MIDI_Mode);
+   Engines : array (Tresses_Channels) of MIDI.MIDI_Data := (others => 0);
 
    Sample_Rec_Playback :
    WNM.Voices.Sampler_Voice.Sample_Rec_Playback_Instance;
@@ -73,7 +98,7 @@ package body WNM.Synth is
    --  RAM.
 
    subtype Voice_Class is Tresses.Interfaces.Four_Params_Voice'Class;
-   type Voice_Access is access all Voice_Class;
+
 
    subtype Lead_Engine_Range is MIDI.MIDI_Data range 0 .. 32;
    function Lead_Engines (V : MIDI.MIDI_Data) return Tresses.Synth_Engines
@@ -193,19 +218,7 @@ package body WNM.Synth is
           when 1      => Voices.Chord_Voice.Mixed_Waveforms,
           when others => Voices.Chord_Voice.Custom_Waveform);
 
-   Synth_Voices : constant array (Tresses_Channels) of
-     Voice_Access :=
-       (Sample1_Channel    => Sampler1'Access,
-        Sample2_Channel    => Sampler2'Access,
-        Kick_Channel       => TK'Access,
-        Snare_Channel      => TS'Access,
-        Hihat_Channel      => HH'Access,
-        Lead_Channel       => Lead'Access,
-        Bass_Channel       => Bass'Access,
-        Chord_Channel      => Chord'Access,
-        Reverb_Channel     => WNM.Mixer.FX_Reverb'Access,
-        Drive_Channel      => WNM.Mixer.FX_Drive'Access,
-        Bitcrusher_Channel => WNM.Mixer.FX_Bitcrush'Access);
+
 
    LFO_Targets : array (Tresses_Channels) of MIDI.MIDI_Data :=
      (others => Voice_Pan_CC);
@@ -418,6 +431,120 @@ package body WNM.Synth is
       Coproc_Event_Queues.Push (Coproc_Event_Queue, Msg);
    end Push_Copro_Event;
 
+   generic
+      with procedure Process (Voice : in out Voice_Class);
+   procedure With_Voice (Chan : Tresses_Channels);
+
+   procedure With_Voice (Chan : Tresses_Channels) is
+      S : constant Natural := Channel_Slot (Chan);
+   begin
+      if S = 0 then
+         return;
+      end if;
+      case Kinds (Chan) is
+         when Kick_Mode => Process (Slots (S).TK);
+         when Snare_Mode => Process (Slots (S).TS);
+         when Hihat_Mode => Process (Slots (S).HH);
+         when Chord_Mode => Process (Slots (S).Chord);
+         when Sample1_Mode | Sample2_Mode => Process (Slots (S).Sampler);
+         when Bass_Mode | Lead_Mode => Process (Slots (S).Lead);
+         when others => null;
+      end case;
+   end With_Voice;
+
+   procedure Set_Engine (Chan : Tresses_Channels) is
+      S : constant Natural := Channel_Slot (Chan);
+      V : constant MIDI.MIDI_Data := Engines (Chan);
+   begin
+      if S = 0 then
+         return;
+      end if;
+      case Kinds (Chan) is
+         when Kick_Mode => Slots (S).TK.Set_Engine (Kick_Engines (V));
+         when Snare_Mode => Slots (S).TS.Set_Engine (Snare_Engines (V));
+         when Hihat_Mode => Slots (S).HH.Set_Engine (HH_Engines (V));
+         when Bass_Mode | Lead_Mode => Slots (S).Lead.Set_Engine (Lead_Engines (V));
+         when Chord_Mode =>
+            Slots (S).Chord.Set_Engine (Chord_Engines (V));
+            Slots (S).Chord.Init;
+         when Sample1_Mode | Sample2_Mode =>
+            Slots (S).Sampler.Set_Engine (Sampler_Engines (V));
+         when others => null;
+      end case;
+   end Set_Engine;
+
+   procedure Release_Channel (Chan : Tresses_Channels) is
+      S : constant Natural := Channel_Slot (Chan);
+   begin
+      if S /= 0 then
+         Owners (S) := -1;
+         Free (Slots (S));
+      end if;
+      Channel_Slot (Chan) := 0;
+
+      L_Peak (Chan) := 0;
+      R_Peak (Chan) := 0;
+   end Release_Channel;
+
+   procedure Allocate_Voice (Chan : Tresses_Channels) is
+      S : Voice_Slot := Voice_Slot'First;
+   begin
+      if Kinds (Chan) in MIDI_Mode | Reverb_Mode .. Bitcrush_Mode then
+         return;
+      end if;
+      if Channel_Slot (Chan) = 0 then
+         for I in Voice_Slot loop
+            if Owners (I) = -1 then
+               S := I;
+               exit;
+            elsif Ages (I) < Ages (S) then
+               S := I;
+            end if;
+         end loop;
+         if Owners (S) /= -1 then
+            Release_Channel (Tresses_Channels (Owners (S)));
+         end if;
+         Owners (S) := Integer (Chan);
+         Channel_Slot (Chan) := S;
+         case Kinds (Chan) is
+            when Kick_Mode => Slots (S) := new Slot_Rec'(B => null, Kind => Kick_Mode, TK => <>);
+            when Snare_Mode => Slots (S) := new Slot_Rec'(B => null, Kind => Snare_Mode, TS => <>);
+            when Hihat_Mode => Slots (S) := new Slot_Rec'(B => null, Kind => Hihat_Mode, HH => <>);
+            when Chord_Mode => Slots (S) := new Slot_Rec'(B => null, Kind => Chord_Mode, Chord => <>);
+            when Sample1_Mode | Sample2_Mode =>
+               Slots (S) := new Slot_Rec'(B => null, Kind => Sample_Kind (Kinds (Chan)), Sampler => <>);
+            when Bass_Mode | Lead_Mode =>
+               Slots (S) := new Slot_Rec'(B => Macro_Buffers (S)'Access, Kind => Macro_Kind (Kinds (Chan)), Lead => <>);
+               Slots (S).Lead.Set_User_Waveform (User_Waveform'Access);
+            when others => null;
+         end case;
+         case Kinds (Chan) is
+            when Kick_Mode =>
+               Slots (S).TK.Init;
+            when Snare_Mode =>
+               Slots (S).TS.Init;
+            when Hihat_Mode =>
+               Slots (S).HH.Init;
+            when Chord_Mode =>
+               Slots (S).Chord.Init;
+            when Sample1_Mode | Sample2_Mode =>
+               Slots (S).Sampler.Init;
+            when Bass_Mode | Lead_Mode =>
+               Slots (S).Lead.Init;
+            when others => null;
+         end case;
+         Set_Engine (Chan);
+      else
+         S := Channel_Slot (Chan);
+      end if;
+      for I in Voice_Slot loop
+         if Ages (I) > Ages (S) then
+            Ages (I) := Ages (I) - 1;
+         end if;
+      end loop;
+      Ages (S) := Internal_Voice_Count;
+   end Allocate_Voice;
+
    ---------------------------
    -- Process_Coproc_Events --
    ---------------------------
@@ -443,38 +570,58 @@ package body WNM.Synth is
                --  Send the buffers back to main CPU
                WNM.Coproc.Push_To_Main (Msg);
 
-            when WNM.Coproc.MIDI_Event =>
+            when WNM.Coproc.Sample_Preview =>
+               if Msg.MIDI_Evt.Kind = MIDI.Note_On then
+                  Sample_Rec_Playback.Note_On (Msg.MIDI_Evt.Key);
+               end if;
+
+            when WNM.Coproc.MIDI_Event | WNM.Coproc.Voice_Config =>
 
                --  Ada.Text_IO.Put_Line ("Synth message is MIDI");
                --  Ada.Text_IO.Put_Line
                --    (Clock'Img & " - " &
                --     MIDI.Img (Msg.MIDI_Evt));
 
-               if Msg.MIDI_Evt.Chan in Synth_Voices'Range then
+               if Msg.Kind = WNM.Coproc.Voice_Config
+               then
                   declare
-                     Voice : Voice_Class renames
-                       Synth_Voices (Msg.MIDI_Evt.Chan).all;
+                     Chan : constant Tresses_Channels := Msg.MIDI_Evt.Chan;
+                     Raw : constant MIDI.MIDI_Data := Msg.MIDI_Evt.Controller_Value;
                   begin
-                     case Msg.MIDI_Evt.Kind is
+                     --  A full synchronization also terminates tails from the
+                     --  previous project, even if its voice kind was the same.
+                     Release_Channel (Chan);
+                     if Raw <= Voice_Kind'Pos (Voice_Kind'Last) then
+                        Kinds (Chan) := Voice_Kind'Val (Raw);
+                     else
+                        Kinds (Chan) := MIDI_Mode;
+                     end if;
+                  end;
+               else
+                  if Msg.MIDI_Evt.Kind = MIDI.Note_On then
+                     Allocate_Voice (Msg.MIDI_Evt.Chan);
+                  end if;
+                  declare
+                     Chan : constant Tresses_Channels := Msg.MIDI_Evt.Chan;
+                     S : constant Natural := Channel_Slot (Chan);
+                     procedure Process_Note (Voice : in out Voice_Class) is
+                     begin
+                        case Msg.MIDI_Evt.Kind is
                      when MIDI.Note_On =>
 
                         declare
                            Key : constant MIDI_Key := Msg.MIDI_Evt.Key;
                         begin
-                           if Msg.MIDI_Evt.Chan = Sample1_Channel then
-                              Sampler1.Set_MIDI_Pitch (Key);
-                           elsif Msg.MIDI_Evt.Chan = Sample2_Channel then
-                              Sampler2.Set_MIDI_Pitch (Key);
-                           elsif Msg.MIDI_Evt.Chan = Chord_Channel then
-
-                              Chord.Key_On (Msg.MIDI_Evt.Key,
-                                            Tresses.MIDI_Param
-                                              (Msg.MIDI_Evt.Velocity));
-
+                           if Kinds (Chan) in Sample1_Mode | Sample2_Mode then
+                              Slots (S).Sampler.Set_Sample
+                                (Tresses.Param_MIDI (In_Voice_Parameters (Chan)(Voice_Param_1_CC)));
+                              Slots (S).Sampler.Set_MIDI_Pitch (Key);
+                           elsif Kinds (Chan) = Chord_Mode then
+                              Slots (S).Chord.Key_On
+                                (Key, Tresses.MIDI_Param (Msg.MIDI_Evt.Velocity));
                            else
                               Voice.Set_Pitch (Tresses.MIDI_Pitch
-                                               (Standard.MIDI.MIDI_UInt8
-                                                  (Key)));
+                                (Standard.MIDI.MIDI_UInt8 (Key)));
                            end if;
 
                            Voice.Note_On (Tresses.MIDI_Param
@@ -492,8 +639,8 @@ package body WNM.Synth is
                         declare
                            Key : constant MIDI_Key := Msg.MIDI_Evt.Key;
                         begin
-                           if Msg.MIDI_Evt.Chan = Chord_Channel then
-                              Chord.Key_Off (Msg.MIDI_Evt.Key);
+                           if Kinds (Chan) = Chord_Mode then
+                              Slots (S).Chord.Key_Off (Msg.MIDI_Evt.Key);
 
                            elsif Last_Key (Msg.MIDI_Evt.Chan) = Key then
                               --  Only apply note_off if it matches the last
@@ -503,25 +650,18 @@ package body WNM.Synth is
                            end if;
                         end;
 
+                           when others => null;
+                        end case;
+                     end Process_Note;
+                     procedure Dispatch_Note is new With_Voice (Process_Note);
+                  begin
+                     case Msg.MIDI_Evt.Kind is
+                        when MIDI.Note_On | MIDI.Note_Off => Dispatch_Note (Chan);
                      when MIDI.Continous_Controller =>
                         case Msg.MIDI_Evt.Controller is
                            when LFO_Compatible_CC =>
 
-                              if Msg.MIDI_Evt.Chan = Sample1_Channel
-                                and then
-                                  Msg.MIDI_Evt.Controller = Voice_Param_1_CC
-                              then
-                                 Sampler1.Set_Sample
-                                   (Msg.MIDI_Evt.Controller_Value);
-
-                              elsif Msg.MIDI_Evt.Chan = Sample2_Channel
-                                and then
-                                  Msg.MIDI_Evt.Controller = Voice_Param_1_CC
-                              then
-                                 Sampler2.Set_Sample
-                                   (Msg.MIDI_Evt.Controller_Value);
-
-                              elsif Msg.MIDI_Evt.Controller in
+                              if Msg.MIDI_Evt.Controller in
                                 Voice_Volume_CC | Voice_Pan_CC
                               then
                                  In_Voice_Parameters
@@ -541,42 +681,8 @@ package body WNM.Synth is
 
                            when Voice_Engine_CC =>
 
-                              case Msg.MIDI_Evt.Chan is
-                              when Kick_Channel =>
-                                 TK.Set_Engine
-                                   (Kick_Engines
-                                      (Msg.MIDI_Evt.Controller_Value));
-                              when Lead_Channel =>
-                                 Lead.Set_Engine
-                                   (Lead_Engines
-                                      (Msg.MIDI_Evt.Controller_Value));
-                              when Bass_Channel =>
-                                 Bass.Set_Engine
-                                   (Lead_Engines
-                                      (Msg.MIDI_Evt.Controller_Value));
-                              when Snare_Channel =>
-                                 TS.Set_Engine
-                                   (Snare_Engines
-                                      (Msg.MIDI_Evt.Controller_Value));
-                              when Hihat_Channel =>
-                                 HH.Set_Engine
-                                   (HH_Engines
-                                      (Msg.MIDI_Evt.Controller_Value));
-                              when Chord_Channel =>
-                                 Chord.Set_Engine
-                                   (Chord_Engines
-                                      (Msg.MIDI_Evt.Controller_Value));
-                              when Sample1_Channel =>
-                                 Sampler1.Set_Engine
-                                   (Sampler_Engines
-                                      (Msg.MIDI_Evt.Controller_Value));
-                              when Sample2_Channel =>
-                                 Sampler2.Set_Engine
-                                   (Sampler_Engines
-                                      (Msg.MIDI_Evt.Controller_Value));
-                              when others =>
-                                 null;
-                              end case;
+                              Engines (Chan) := Msg.MIDI_Evt.Controller_Value;
+                              Set_Engine (Chan);
 
                            when Voice_FX_CC =>
                               FX_Send (Msg.MIDI_Evt.Chan) :=
@@ -622,19 +728,12 @@ package body WNM.Synth is
                            when others =>
                               null;
                         end case;
-                     when others =>
-                        null;
+                        when others => null;
                      end case;
                   end;
 
-               elsif Msg.MIDI_Evt.Chan = Sample_Rec_Playback_Channel then
-                  case Msg.MIDI_Evt.Kind is
-                     when Note_On =>
-                        Sample_Rec_Playback.Note_On (Msg.MIDI_Evt.Key);
-                     when others =>
-                        null;
-                  end case;
                end if;
+
 
             when Synth_CPU_Crash =>
                raise Program_Error with "Synth exception requested";
@@ -755,14 +854,28 @@ package body WNM.Synth is
 
       --  Set params
       for Chan in Tresses_Channels loop
-         Synth_Voices (Chan).Set_Param
+         declare
+            procedure Apply (Voice : in out Voice_Class) is
+            begin
+         Voice.Set_Param
            (1, Out_Voice_Parameters (Chan)(Voice_Param_1_CC));
-         Synth_Voices (Chan).Set_Param
+         Voice.Set_Param
            (2, Out_Voice_Parameters (Chan)(Voice_Param_2_CC));
-         Synth_Voices (Chan).Set_Param
+         Voice.Set_Param
            (3, Out_Voice_Parameters (Chan)(Voice_Param_3_CC));
-         Synth_Voices (Chan).Set_Param
+         Voice.Set_Param
            (4, Out_Voice_Parameters (Chan)(Voice_Param_4_CC));
+            end Apply;
+            procedure Dispatch is new With_Voice (Apply);
+         begin
+            Dispatch (Chan);
+            if Channel_Slot (Chan) /= 0 and then
+              Kinds (Chan) in Sample1_Mode | Sample2_Mode
+            then
+               Slots (Channel_Slot (Chan)).Sampler.Set_Sample
+                 (Tresses.Param_MIDI (Out_Voice_Parameters (Chan)(Voice_Param_1_CC)));
+            end if;
+         end;
 
          Pan_For_Chan (Chan) := To_Pan
            (Out_Voice_Parameters (Chan)(Voice_Pan_CC));
@@ -771,11 +884,18 @@ package body WNM.Synth is
             (Out_Voice_Parameters (Chan)(Voice_Volume_CC));
       end loop;
 
-      --  Send the FX parameters in FX buffer
-      Output.Parameters (Overdrive) := Out_Voice_Parameters (Drive_Channel);
-      Output.Parameters (Bitcrusher) :=
-        Out_Voice_Parameters (Bitcrusher_Channel);
-      Output.Parameters (Reverb) := Out_Voice_Parameters (Reverb_Channel);
+      Output.Parameters := (others => (others => Tresses.MIDI_Param (63)));
+      Output.Parameters (Overdrive)(1) := Tresses.MIDI_Param (127);
+      --  FX remain global buses. If several tracks automate the same bus,
+      --  the highest-numbered configured track supplies its parameters.
+      for Chan in Tresses_Channels loop
+         case Kinds (Chan) is
+            when Reverb_Mode => Output.Parameters (Reverb) := Out_Voice_Parameters (Chan);
+            when Drive_Mode => Output.Parameters (Overdrive) := Out_Voice_Parameters (Chan);
+            when Bitcrush_Mode => Output.Parameters (Bitcrusher) := Out_Voice_Parameters (Chan);
+            when others => null;
+         end case;
+      end loop;
 
       if WNM.Mixer.Get_Sample_Rec_Mode in WNM.Mixer.Play then
          --  We are in sample record playback mode, the synth CPU is now in
@@ -791,45 +911,26 @@ package body WNM.Synth is
 
          --  Regular synthesis of all channels
 
-         Start (Synth_Perf (Kick_Channel));
-         TK.Render (Buffer);
-         Mix (Kick_Channel);
-         Stop (Synth_Perf (Kick_Channel));
-
-         Start (Synth_Perf (Snare_Channel));
-         TS.Render (Buffer);
-         Mix (Snare_Channel);
-         Stop (Synth_Perf (Snare_Channel));
-
-         Start (Synth_Perf (Lead_Channel));
-         Lead.Render (Buffer, Aux_Buffer);
-         Mix (Lead_Channel);
-         Stop (Synth_Perf (Lead_Channel));
-
-         Start (Synth_Perf (Bass_Channel));
-         Bass.Render (Buffer, Aux_Buffer);
-         Mix (Bass_Channel);
-         Stop (Synth_Perf (Bass_Channel));
-
-         Start (Synth_Perf (Chord_Channel));
-         Chord.Render (Buffer);
-         Mix (Chord_Channel);
-         Stop (Synth_Perf (Chord_Channel));
-
-         Start (Synth_Perf (Sample1_Channel));
-         Sampler1.Render (Buffer);
-         Mix (Sample1_Channel);
-         Stop (Synth_Perf (Sample1_Channel));
-
-         Start (Synth_Perf (Sample2_Channel));
-         Sampler2.Render (Buffer);
-         Mix (Sample2_Channel);
-         Stop (Synth_Perf (Sample2_Channel));
-
-         Start (Synth_Perf (Hihat_Channel));
-         HH.Render (Buffer);
-         Mix (Hihat_Channel);
-         Stop (Synth_Perf (Hihat_Channel));
+         for Chan in Tresses_Channels loop
+            if Channel_Slot (Chan) /= 0 then
+               declare
+                  S : constant Voice_Slot := Channel_Slot (Chan);
+               begin
+                  Start (Synth_Perf (Chan));
+                  case Kinds (Chan) is
+                     when Kick_Mode => Slots (S).TK.Render (Buffer);
+                     when Snare_Mode => Slots (S).TS.Render (Buffer);
+                     when Hihat_Mode => Slots (S).HH.Render (Buffer);
+                     when Bass_Mode | Lead_Mode => Slots (S).Lead.Render (Buffer, Aux_Buffer);
+                     when Chord_Mode => Slots (S).Chord.Render (Buffer);
+                     when Sample1_Mode | Sample2_Mode => Slots (S).Sampler.Render (Buffer);
+                     when others => Buffer := (others => 0);
+                  end case;
+                  Mix (Chan);
+                  Stop (Synth_Perf (Chan));
+               end;
+            end if;
+         end loop;
       end if;
 
       Utils.Stop (Overall_Synth_Perf);
@@ -904,16 +1005,28 @@ package body WNM.Synth is
    -- Kick_Param_Label --
    ----------------------
 
-   function Kick_Param_Label (Id : Tresses.Param_Id) return String
-   is (TK.Param_Label (Id));
+   function Kick_Param_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id) return String
+   is
+      V : WNM.Voices.Kick_Voice.Instance;
+   begin
+      V.Set_Engine (Kick_Engines (Engine));
+      return V.Param_Label (Id);
+   end Kick_Param_Label;
 
    ----------------------------
    -- Kick_Param_Short_Label --
    ----------------------------
 
-   function Kick_Param_Short_Label (Id : Tresses.Param_Id)
+   function Kick_Param_Short_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                                     return Tresses.Short_Label
-   is (TK.Param_Short_Label (Id));
+   is
+      V : WNM.Voices.Kick_Voice.Instance;
+   begin
+      V.Set_Engine (Kick_Engines (Engine));
+      return V.Param_Short_Label (Id);
+   end Kick_Param_Short_Label;
 
    -----------------------
    -- Snare_Engine_Last --
@@ -933,16 +1046,28 @@ package body WNM.Synth is
    -- Snare_Param_Label --
    -----------------------
 
-   function Snare_Param_Label (Id : Tresses.Param_Id) return String
-   is (TS.Param_Label (Id));
+   function Snare_Param_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id) return String
+   is
+      V : WNM.Voices.Snare_Voice.Instance;
+   begin
+      V.Set_Engine (Snare_Engines (Engine));
+      return V.Param_Label (Id);
+   end Snare_Param_Label;
 
    -----------------------------
    -- Snare_Param_Short_Label --
    -----------------------------
 
-   function Snare_Param_Short_Label (Id : Tresses.Param_Id)
+   function Snare_Param_Short_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                                     return Tresses.Short_Label
-   is (TS.Param_Short_Label (Id));
+   is
+      V : WNM.Voices.Snare_Voice.Instance;
+   begin
+      V.Set_Engine (Snare_Engines (Engine));
+      return V.Param_Short_Label (Id);
+   end Snare_Param_Short_Label;
 
    -----------------------
    -- Hihat_Engine_Last --
@@ -962,16 +1087,28 @@ package body WNM.Synth is
    -- Cymbal_Param_Label --
    ------------------------
 
-   function Hihat_Param_Label (Id : Tresses.Param_Id) return String
-   is (HH.Param_Label (Id));
+   function Hihat_Param_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id) return String
+   is
+      V : WNM.Voices.Hihat_Voice.Instance;
+   begin
+      V.Set_Engine (HH_Engines (Engine));
+      return V.Param_Label (Id);
+   end Hihat_Param_Label;
 
    ------------------------------
    -- Cymbal_Param_Short_Label --
    ------------------------------
 
-   function Hihat_Param_Short_Label (Id : Tresses.Param_Id)
+   function Hihat_Param_Short_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                                       return Tresses.Short_Label
-   is (HH.Param_Short_Label (Id));
+   is
+      V : WNM.Voices.Hihat_Voice.Instance;
+   begin
+      V.Set_Engine (HH_Engines (Engine));
+      return V.Param_Short_Label (Id);
+   end Hihat_Param_Short_Label;
 
    -------------------------
    -- Sampler_Engine_Last --
@@ -991,23 +1128,29 @@ package body WNM.Synth is
    -- Sampler_Param_Label --
    -------------------------
 
-   function Sampler_Param_Label (Chan : Sampler_Channels;
+   function Sampler_Param_Label (Engine : MIDI.MIDI_Data;
                                  Id   : Tresses.Param_Id)
                                  return String
-   is (case Chan is
-          when Sample1_Channel => Sampler1.Param_Label (Id),
-          when Sample2_Channel => Sampler2.Param_Label (Id));
+   is
+      V : WNM.Voices.Sampler_Voice.Instance;
+   begin
+      V.Set_Engine (Sampler_Engines (Engine));
+      return V.Param_Label (Id);
+   end Sampler_Param_Label;
 
    -------------------------------
    -- Sampler_Param_Short_Label --
    -------------------------------
 
-   function Sampler_Param_Short_Label (Chan : Sampler_Channels;
+   function Sampler_Param_Short_Label (Engine : MIDI.MIDI_Data;
                                        Id   : Tresses.Param_Id)
                                        return Tresses.Short_Label
-   is (case Chan is
-          when Sample1_Channel => Sampler1.Param_Short_Label (Id),
-          when Sample2_Channel => Sampler2.Param_Short_Label (Id));
+   is
+      V : WNM.Voices.Sampler_Voice.Instance;
+   begin
+      V.Set_Engine (Sampler_Engines (Engine));
+      return V.Param_Short_Label (Id);
+   end Sampler_Param_Short_Label;
 
    ------------------------
    -- Reverb_Param_Label --
@@ -1075,20 +1218,32 @@ package body WNM.Synth is
    -- Chord_Param_Label --
    -----------------------
 
-   function Chord_Param_Label (Id : Tresses.Param_Id)
+   function Chord_Param_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                                return String
-   is (Chord.Param_Label (Id));
+   is
+      V : WNM.Voices.Chord_Voice.Instance;
+   begin
+      V.Set_Engine (Chord_Engines (Engine));
+      return V.Param_Label (Id);
+   end Chord_Param_Label;
 
    -----------------------------
    -- Chord_Param_Short_Label --
    -----------------------------
 
-   function Chord_Param_Short_Label (Id : Tresses.Param_Id)
+   function Chord_Param_Short_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                                      return Tresses.Short_Label
-   is (Chord.Param_Short_Label (Id));
+   is
+      V : WNM.Voices.Chord_Voice.Instance;
+   begin
+      V.Set_Engine (Chord_Engines (Engine));
+      return V.Param_Short_Label (Id);
+   end Chord_Param_Short_Label;
 
 begin
-   Lead.Set_Engine (Voice_Saw_Swarm);
-   Lead.Set_User_Waveform (User_Waveform'Access);
-   Bass.Set_User_Waveform (User_Waveform'Access);
+   for S in Voice_Slot loop
+      Ages (S) := S;
+   end loop;
 end WNM.Synth;

@@ -31,13 +31,12 @@ package WNM.Shared_Buffers is
    Shared_Buffer : HAL.UInt8_Array (1 .. Shared_Buffer_Byte_Size)
      with Alignment => 8;
 
-   Lead_Synth_Offset : constant := 1;
-   Lead_Synth_Byte_Size : constant := 8_400;
+   Voice_Buffer_Offset : constant := 1;
+   Voice_Buffer_Byte_Size : constant := 8_400;
+   Voice_Buffer_Count : constant := 8;
 
-   Bass_Synth_Offset : constant := Lead_Synth_Offset + Lead_Synth_Byte_Size;
-   Bass_Synth_Byte_Size : constant := 8_400;
-
-   Reverb_Offset : constant := Bass_Synth_Offset + Bass_Synth_Byte_Size;
+   Reverb_Offset : constant := Voice_Buffer_Offset +
+     Voice_Buffer_Count * Voice_Buffer_Byte_Size;
    Reverb_Byte_Size : constant := 33_000;
 
    -- Short term sequencer --

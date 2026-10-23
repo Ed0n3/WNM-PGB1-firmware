@@ -84,12 +84,12 @@ package WNM.Voices.Chord_Voice is
 private
 
    type Voice is record
-      On : Boolean;
-      Note : MIDI.MIDI_Key;
-      Phase              : U32;
-      Start_Phase_Incr   : U32;
-      Current_Phase_Incr : U32;
-      Target_Phase_Incr  : U32;
+      On : Boolean := False;
+      Note : MIDI.MIDI_Key := 0;
+      Phase              : U32 := 0;
+      Start_Phase_Incr   : U32 := 0;
+      Current_Phase_Incr : U32 := 0;
+      Target_Phase_Incr  : U32 := 0;
    end record;
 
    Chord_Voices : constant := 4;

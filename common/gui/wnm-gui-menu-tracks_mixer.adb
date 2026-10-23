@@ -26,6 +26,7 @@ with WNM.Screen; use WNM.Screen;
 with WNM.Project; use WNM.Project;
 with WNM.Mixer;
 with WNM.Synth;
+with WNM.Utils;
 with MIDI;
 
 with fx_bypass;
@@ -221,15 +222,7 @@ package body WNM.GUI.Menu.Tracks_Mixer is
               (Natural (Id) - 1) * Col_Width + Col_Width / 2;
 
             Chan : constant MIDI.MIDI_Channel :=
-              (case Id is
-                  when 1 => WNM.Synth.Kick_Channel,
-                  when 2 => WNM.Synth.Snare_Channel,
-                  when 3 => WNM.Synth.Hihat_Channel,
-                  when 4 => WNM.Synth.Bass_Channel,
-                  when 5 => WNM.Synth.Lead_Channel,
-                  when 6 => WNM.Synth.Chord_Channel,
-                  when 7 => WNM.Synth.Sample1_Channel,
-                  when 8 => WNM.Synth.Sample2_Channel);
+              Project.Voice_MIDI_Chan (Id);
 
          begin
 
@@ -242,15 +235,8 @@ package body WNM.GUI.Menu.Tracks_Mixer is
 
             Draw_Str (X_Col_Center - Font_Width + 1,
                       Top_Text_Y,
-                      (case Id is
-                          when 1 => "KD",
-                          when 2 => "SD",
-                          when 3 => "HH",
-                          when 4 => "BA",
-                          when 5 => "LD",
-                          when 6 => "CH",
-                          when 7 => "S1",
-                          when 8 => "S2"));
+                      (if Id < 10 then "0" else "") &
+                        WNM.Utils.Trim (Id'Img));
 
             case Sub (Top) is
                when Volume =>

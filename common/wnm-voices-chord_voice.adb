@@ -71,10 +71,10 @@ package body WNM.Voices.Chord_Voice is
    procedure Init (This : in out Instance) is
    begin
       for V of This.Voices loop
-         V.On := False;
-
-         V.Phase := 0;
+         V := (others => <>);
       end loop;
+      This.Next := Voice_Id'First;
+      This.Do_Init := False;
 
       Envelopes.AR.Init (This.Env, Do_Hold => True);
 

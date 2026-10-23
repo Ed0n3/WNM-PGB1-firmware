@@ -30,6 +30,7 @@ package WNM.GUI.Menu.Track_Settings is
 private
 
    type Top_Settings is (Engine,
+                         Track_Mode,
                          CC_Default,
                          LFO,
                          Volume,
@@ -46,9 +47,11 @@ private
                          CC_Ctrl_B, CC_Label_B,
                          CC_Ctrl_C, CC_Label_C,
                          CC_Ctrl_D, CC_Label_D,
-                         Track_Mode);
+                         Arp_Length, Arp_Note, Record_Quantize);
 
    subtype Sub_Settings is Project.User_Track_Settings;
+
+   function To_Top (S : Sub_Settings) return Top_Settings;
 
    function Top_Setting_Position (S : Top_Settings;
                                   M : Project.Track_Mode_Kind)
@@ -62,7 +65,8 @@ private
              S in Track_Mode | CC_Default_A .. CC_Default_D |
                   MIDI_Chan | MIDI_Instrument | Arp_Mode |
                   Track_Octave_Offset | Shuffle |
-                  Arp_Notes | Notes_Per_Chord | CC_Ctrl_A .. CC_Label_D,
+                  Arp_Notes | Arp_Length | Arp_Note | Record_Quantize |
+                  Notes_Per_Chord | CC_Ctrl_A .. CC_Label_D,
 
           --  Multi engines
           when Project.Lead_Mode | Project.Bass_Mode | Project.Kick_Mode |
@@ -70,7 +74,8 @@ private
                Project.Sample1_Mode | Project.Sample2_Mode =>
              S in Track_Mode | Engine | Volume | Pan | Master_FX | Arp_Mode |
                   Track_Octave_Offset | Shuffle |
-                  Arp_Notes | CC_Default_A .. CC_Default_D |
+                  Arp_Notes | Arp_Length | Arp_Note | Record_Quantize |
+                  Notes_Per_Chord | CC_Default_A .. CC_Default_D |
                   LFO_Rate | LFO_Amplitude | LFO_Target | LFO_Shape,
 
           --  Effects

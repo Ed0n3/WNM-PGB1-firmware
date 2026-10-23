@@ -19,8 +19,6 @@
 --                                                                           --
 -------------------------------------------------------------------------------
 
-with WNM.Project;
-
 package WNM.GUI.Menu.System_Info is
 
    procedure Push_Window;
@@ -51,8 +49,7 @@ private
    type Instance is new Menu_Window with record
       K : Info_Kind := Info_Kind'First;
 
-      Selected_Load_Synth : Project.Synth_Track_Mode_Kind :=
-        Project.Synth_Track_Mode_Kind'First;
+      Selected_Load_Synth : Tracks := Tracks'First;
       Mixer_Max_Load : CPU_Load := 0.0;
    end record;
 

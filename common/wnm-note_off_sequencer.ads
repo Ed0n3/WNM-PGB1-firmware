@@ -44,7 +44,7 @@ private
    type Event is record
       Key        : MIDI.MIDI_Key := 0;
       Expiration : Time.Time_Microseconds := 0;
-   end record;
+   end record with Pack;
 
    Events : array (MIDI_Target, MIDI.MIDI_Channel, Event_Index) of Event;
 

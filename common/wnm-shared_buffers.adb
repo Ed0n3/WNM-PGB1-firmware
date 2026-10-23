@@ -26,20 +26,14 @@ package body WNM.Shared_Buffers is
    -------------------------
 
    procedure Clear_Synth_Buffers is
-      subtype Lead_Range
-        is Natural range
-          Lead_Synth_Offset .. Lead_Synth_Offset + Lead_Synth_Byte_Size - 1;
-
-      subtype Bass_Range
-        is Natural range
-          Bass_Synth_Offset .. Bass_Synth_Offset + Bass_Synth_Byte_Size - 1;
+      subtype Voice_Range is Natural range
+        Voice_Buffer_Offset .. Reverb_Offset - 1;
 
       subtype Reverb_Range
         is Natural range
           Reverb_Offset .. Reverb_Offset + Reverb_Byte_Size - 1;
    begin
-      Shared_Buffer (Lead_Range) := (others => 0);
-      Shared_Buffer (Bass_Range) := (others => 0);
+      Shared_Buffer (Voice_Range) := (others => 0);
       Shared_Buffer (Reverb_Range) := (others => 0);
    end Clear_Synth_Buffers;
 

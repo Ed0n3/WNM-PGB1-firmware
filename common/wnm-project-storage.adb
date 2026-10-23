@@ -98,7 +98,8 @@ with WNM.File_System; use WNM.File_System;
 
 package body WNM.Project.Storage is
 
-   Format_Version : constant := 1;
+   Format_Version : constant := 2;
+   Loaded_Version : In_UInt := Format_Version;
 
    procedure Read is new File_In.Read_Gen_Int (Tracks);
    procedure Read is new File_In.Read_Gen_Int (Patterns);
@@ -217,6 +218,11 @@ package body WNM.Project.Storage is
                                               (Step.Duration'Enum_Rep));
                               end if;
 
+                           when Timing =>
+                              if Step.Timing /= 0 then
+                                 Output.Push (Set);
+                                 Output.Push (Out_UInt (Step.Timing));
+                              end if;
                            when Velo =>
                               if Step.Velo /= Default_Step.Velo then
                                  Output.Push (Set);
@@ -317,7 +323,7 @@ package body WNM.Project.Storage is
 
                case Set is
                   when Track_Mode =>
-                     Output.Push (Out_UInt (Track.MIDI_Enabled'Enum_Rep));
+                     Output.Push (Out_UInt (Mode (T_Id)'Enum_Rep));
 
                   when Engine =>
                      Output.Push (Out_UInt (Track.Engine));
@@ -365,6 +371,14 @@ package body WNM.Project.Storage is
 
                   when Arp_Notes =>
                      Output.Push (Out_UInt (Track.Arp_Notes'Enum_Rep));
+                  when Arp_Length =>
+                     Output.Push (Out_UInt (Track.Arp_Length));
+                  when Arp_Note =>
+                     for Key of Track.Arp_Keys loop
+                        Output.Push (Out_UInt (Key));
+                     end loop;
+                  when Record_Quantize =>
+                     Output.Push (Track.Record_Quantize);
 
                   when Notes_Per_Chord =>
                      Output.Push (Out_UInt (Track.Notes_Per_Chord'Enum_Rep));
@@ -400,7 +414,7 @@ package body WNM.Project.Storage is
                      Output.Push (Track.CC (A).Label);
 
                   when CC_Label_B =>
-                     Output.Push (Track.CC (D).Label);
+                     Output.Push (Track.CC (B).Label);
 
                   when CC_Label_C =>
                      Output.Push (Track.CC (C).Label);
@@ -499,6 +513,12 @@ package body WNM.Project.Storage is
                Output.Push (Out_UInt (Chord.Name'Enum_Rep));
             when Duration =>
                Output.Push (Out_UInt (Chord.Duration));
+            when Custom_Chord =>
+               Output.Push (Chord.Custom);
+            when Note_1 .. Note_4 =>
+               Output.Push (Out_UInt (Chord.Notes
+                 (WNM.Chord_Settings.Chord_Index_Range
+                   (Chord_Setting_Kind'Pos (Set) - Chord_Setting_Kind'Pos (Note_1)))));
          end case;
          if Output.Status /= Ok then
             return;
@@ -720,6 +740,8 @@ package body WNM.Project.Storage is
       procedure Read is new File_In.Read_Gen_Enum (FX_Kind);
       procedure Read is new File_In.Read_Gen_Enum (Arp_Mode_Kind);
       procedure Read is new File_In.Read_Gen_Enum (Arp_Notes_Kind);
+      procedure Read is new File_In.Read_Gen_Enum (Track_Mode_Kind);
+      procedure Read is new File_In.Read_Gen_Int (Arp_Note_Index);
       procedure Read is new File_In.Read_Gen_Mod (MIDI.MIDI_Channel);
       procedure Read is new File_In.Read_Gen_Mod (MIDI.MIDI_Data);
       procedure Read is new File_In.Read_Gen_Int
@@ -741,7 +763,7 @@ package body WNM.Project.Storage is
          Track : Track_Rec renames G_Project.Tracks (T_Id);
       begin
 
-         Track := Default_Track;
+         Track := Default_Track_For (T_Id);
 
          loop
             Input.Read (Raw);
@@ -754,7 +776,26 @@ package body WNM.Project.Storage is
             exit when not Success;
 
             case S is
-               when Track_Mode  => Read (Input, Track.MIDI_Enabled);
+               when Track_Mode =>
+                  if Loaded_Version = 1 then
+                     declare
+                        External : Boolean;
+                     begin
+                        Read (Input, External);
+                        Track.Mode :=
+                          (if External then MIDI_Mode else
+                            (case T_Id is
+                               when 1 => Kick_Mode, when 2 => Snare_Mode,
+                               when 3 => Hihat_Mode, when 4 => Bass_Mode,
+                               when 5 => Lead_Mode, when 6 => Chord_Mode,
+                               when 7 => Sample1_Mode, when 8 => Sample2_Mode,
+                               when 9 => Reverb_Mode, when 10 => Drive_Mode,
+                               when 11 => Bitcrush_Mode, when others => MIDI_Mode));
+                     end;
+                  else
+                     Read (Input, Track.Mode);
+                  end if;
+                  Track.Mode := Normalize_Mode (T_Id, Track.Mode);
                when Engine      => Read (Input, Track.Engine);
                when Volume      => Read (Input, Track.Volume);
                when Pan         => Read (Input, Track.Pan);
@@ -784,6 +825,12 @@ package body WNM.Project.Storage is
                when LFO_Loop    => Read (Input, Track.LFO_Loop);
                when Arp_Mode    => Read (Input, Track.Arp_Mode);
                when Arp_Notes   => Read (Input, Track.Arp_Notes);
+               when Arp_Length  => Read (Input, Track.Arp_Length);
+               when Arp_Note =>
+                  for Key of Track.Arp_Keys loop
+                     Read (Input, Key);
+                  end loop;
+               when Record_Quantize => Read (Input, Track.Record_Quantize);
                when Notes_Per_Chord => Read (Input, Track.Notes_Per_Chord);
                when MIDI_Chan   => Read (Input, Track.Chan);
                when MIDI_Instrument => null;
@@ -922,6 +969,11 @@ package body WNM.Project.Storage is
             when Tonic    => Read (Input, Chord.Tonic);
             when Name     => Read (Input, Chord.Name);
             when Duration => Read (Input, Chord.Duration);
+            when Custom_Chord => Read (Input, Chord.Custom);
+            when Note_1 .. Note_4 =>
+               Read (Input, Chord.Notes
+                 (WNM.Chord_Settings.Chord_Index_Range
+                   (Chord_Setting_Kind'Pos (S) - Chord_Setting_Kind'Pos (Note_1))));
          end case;
          exit when Input.Status /= Ok;
       end loop;
@@ -1061,6 +1113,7 @@ package body WNM.Project.Storage is
 
             when Duration     => Read (Input, Step.Duration);
             when Velo         => Read (Input, Step.Velo);
+            when Timing       => Read (Input, Step.Timing);
             when Repeat       => Read (Input, Step.Repeat);
             when Repeat_Rate  => Read (Input, Step.Repeat_Rate);
             when CC_A         =>
@@ -1325,10 +1378,18 @@ package body WNM.Project.Storage is
    begin
       Input.Open (Filename);
       Size := 0;
+      if Input.Status /= Ok then
+         return Input.Status;
+      end if;
 
       --  The first data in a project file is a version number for the format.
-      --  Right now it should always be 1 and we don't use this information.
+      --  Version 1 is the stock format; version 2 stores flexible modes.
       Input.Read (Version);
+      if Input.Status /= Ok or else Version not in 1 .. Format_Version then
+         File_System.Close;
+         return Format_Error;
+      end if;
+      Loaded_Version := Version;
 
       --  Set default gains in case there is no mixer section saved
       G_Project.Gains := Default_Gains;

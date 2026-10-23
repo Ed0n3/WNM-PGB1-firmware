@@ -47,8 +47,14 @@ package WNM.Synth is
    Bitcrusher_Channel          : constant MIDI.MIDI_Channel := 11;
    Sample_Rec_Playback_Channel : constant MIDI.MIDI_Channel := 13;
 
-   subtype Tresses_Channels
-     is MIDI.MIDI_Channel range Kick_Channel .. Bitcrusher_Channel;
+   type Voice_Kind is (MIDI_Mode, Sample1_Mode, Sample2_Mode,
+                       Kick_Mode, Snare_Mode, Hihat_Mode,
+                       Bass_Mode, Lead_Mode, Chord_Mode, Reverb_Mode,
+                       Drive_Mode, Bitcrush_Mode);
+
+   subtype Tresses_Channels is MIDI.MIDI_Channel;
+   Voice_Kind_CC : constant MIDI.MIDI_Data := 15;
+   Internal_Voice_Count : constant := 8;
 
    subtype Sampler_Channels
      is MIDI.MIDI_Channel range Sample1_Channel .. Sample2_Channel;
@@ -76,7 +82,7 @@ package WNM.Synth is
    LFO_Amp_Mode_Negative : constant MIDI.MIDI_Data :=
      Tresses.LFO.Negative'Enum_Rep;
 
-   subtype Synth_Tracks is Tracks range 1 .. 8;
+   subtype Synth_Tracks is Tracks;
 
    L_Peak : array (MIDI.MIDI_Channel) of WNM_HAL.Mono_Point := (others => 0)
      with Volatile_Components;
@@ -135,31 +141,37 @@ package WNM.Synth is
 
    function Kick_Engine_Last return MIDI.MIDI_Data;
    function Kick_Engine_Img (Engine : MIDI.MIDI_Data) return String;
-   function Kick_Param_Label (Id : Tresses.Param_Id)
+   function Kick_Param_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                               return String;
-   function Kick_Param_Short_Label (Id : Tresses.Param_Id)
+   function Kick_Param_Short_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                                     return Tresses.Short_Label;
 
    function Snare_Engine_Last return MIDI.MIDI_Data;
    function Snare_Engine_Img (Engine : MIDI.MIDI_Data) return String;
-   function Snare_Param_Label (Id : Tresses.Param_Id)
+   function Snare_Param_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                                return String;
-   function Snare_Param_Short_Label (Id : Tresses.Param_Id)
+   function Snare_Param_Short_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                                      return Tresses.Short_Label;
 
    function Hihat_Engine_Last return MIDI.MIDI_Data;
    function Hihat_Engine_Img (Engine : MIDI.MIDI_Data) return String;
-   function Hihat_Param_Label (Id : Tresses.Param_Id)
+   function Hihat_Param_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                                return String;
-   function Hihat_Param_Short_Label (Id : Tresses.Param_Id)
+   function Hihat_Param_Short_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                                      return Tresses.Short_Label;
 
    function Sampler_Engine_Last return MIDI.MIDI_Data;
    function Sampler_Engine_Img (Engine : MIDI.MIDI_Data) return String;
-   function Sampler_Param_Label (Chan : Sampler_Channels;
+   function Sampler_Param_Label (Engine : MIDI.MIDI_Data;
                                  Id   : Tresses.Param_Id)
                                  return String;
-   function Sampler_Param_Short_Label (Chan : Sampler_Channels;
+   function Sampler_Param_Short_Label (Engine : MIDI.MIDI_Data;
                                        Id   : Tresses.Param_Id)
                                        return Tresses.Short_Label;
 
@@ -180,9 +192,11 @@ package WNM.Synth is
 
    function Chord_Engine_Last return MIDI.MIDI_Data;
    function Chord_Engine_Img (Engine : MIDI.MIDI_Data) return String;
-   function Chord_Param_Label (Id : Tresses.Param_Id)
+   function Chord_Param_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                                return String;
-   function Chord_Param_Short_Label (Id : Tresses.Param_Id)
+   function Chord_Param_Short_Label (Engine : MIDI.MIDI_Data;
+                                    Id : Tresses.Param_Id)
                                      return Tresses.Short_Label;
 
 end WNM.Synth;

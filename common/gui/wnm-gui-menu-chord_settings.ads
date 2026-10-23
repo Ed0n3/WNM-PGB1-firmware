@@ -37,7 +37,8 @@ private
    type Chord_Top_Settings is (Prog_Edit, Add_Remove, Magic_Hat);
    function Chord_Top_Settings_Count is new Enum_Count (Chord_Top_Settings);
 
-   subtype Chord_Sub_Settings is WNM.Project.User_Chord_Settings;
+   subtype Chord_Sub_Settings is WNM.Project.User_Chord_Settings
+     range Project.Tonic .. Project.Duration;
    function Chord_Sub_Settings_Count is new Enum_Count (Chord_Sub_Settings);
 
    type Pattern_Settings_Menu is new Menu_Window with record
@@ -69,5 +70,20 @@ private
    overriding
    procedure On_Focus (This       : in out Pattern_Settings_Menu;
                        Exit_Value : Window_Exit_Value);
+
+   subtype Custom_Note_Setting is Project.User_Chord_Settings
+     range Project.Note_1 .. Project.Note_4;
+
+   type Custom_Chords_Menu is new Menu_Window with record
+      Progression : Chord_Progressions := Chord_Progressions'First;
+      Chord : Project.Chord_Slot_Id := Project.Chord_Slot_Id'First;
+      Note : Custom_Note_Setting := Custom_Note_Setting'First;
+   end record;
+
+   overriding
+   procedure Draw (This : in out Custom_Chords_Menu);
+
+   overriding
+   procedure On_Event (This : in out Custom_Chords_Menu; Event : Menu_Event);
 
 end WNM.GUI.Menu.Chord_Settings;

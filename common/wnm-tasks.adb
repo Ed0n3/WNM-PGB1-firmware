@@ -169,7 +169,7 @@ package body WNM.Tasks is
             when Synth_CPU_Crash =>
                raise Program_Error with "Synth crash";
 
-            when MIDI_Event =>
+            when MIDI_Event | Sample_Preview | Voice_Config =>
                raise Program_Error with "MIDI event in seq coproc queue";
          end case;
       end loop;

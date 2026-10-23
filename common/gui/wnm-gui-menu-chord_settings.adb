@@ -45,6 +45,73 @@ package body WNM.GUI.Menu.Chord_Settings is
    use Scale_Choice_Next;
 
    Pattern_Menu_Singleton : aliased Pattern_Settings_Menu;
+   Custom_Menu_Singleton : aliased Custom_Chords_Menu;
+
+   procedure Open_Custom_Chords
+     (Prog : Chord_Progressions;
+      Id : Project.Chord_Slot_Id := Project.Chord_Slot_Id'First;
+      Convert_All : Boolean := True)
+   is
+   begin
+      if Convert_All then
+         for Slot in Project.Chord_Slot_Id range
+           Project.Chord_Slot_Id'First .. Project.Progression_Length (Prog)
+         loop
+            Project.Set (Prog, Slot, Project.Custom_Chord, 1.0);
+         end loop;
+      else
+         Project.Set (Prog, Id, Project.Custom_Chord, 1.0);
+      end if;
+      Custom_Menu_Singleton.Progression := Prog;
+      Custom_Menu_Singleton.Chord := Id;
+      Custom_Menu_Singleton.Note := Custom_Note_Setting'First;
+      Push (Custom_Menu_Singleton'Access);
+   end Open_Custom_Chords;
+
+   overriding
+   procedure Draw (This : in out Custom_Chords_Menu) is
+      Notes : constant WNM.Chord_Settings.Chord_Notes :=
+        Project.Selected_Notes (This.Progression, This.Chord);
+      X : Integer := Box_Left + 10;
+   begin
+      Draw_Menu_Box ("Custom chord" & This.Chord'Img,
+                     Count => Natural (Project.Progression_Length
+                                         (This.Progression)),
+                     Index => Natural (This.Chord) - 1);
+      Draw_Title ("A: next chord", "B: back");
+      for I in Notes'Range loop
+         Draw_Value_Pos
+           (WNM.Key_Img (Notes (I)), X,
+            Project.Chord_Setting_Kind'Pos (This.Note) =
+              Project.Chord_Setting_Kind'Pos (Project.Note_1) + Integer (I));
+         X := X + 27;
+      end loop;
+   end Draw;
+
+   overriding
+   procedure On_Event (This : in out Custom_Chords_Menu; Event : Menu_Event) is
+      package Note_Next is new Enum_Next (Custom_Note_Setting, Wrap => False);
+      use type Project.Chord_Slot_Id;
+   begin
+      case Event.Kind is
+         when Left_Press => Note_Next.Prev (This.Note);
+         when Right_Press => Note_Next.Next (This.Note);
+         when Up_Press =>
+            Project.Next_Value (This.Progression, This.Chord, This.Note);
+         when Down_Press =>
+            Project.Prev_Value (This.Progression, This.Chord, This.Note);
+         when Slider_Touch =>
+            Project.Set (This.Progression, This.Chord, This.Note,
+                         Event.Slider_Value);
+         when A_Press =>
+            This.Chord :=
+              (if This.Chord = Project.Progression_Length (This.Progression)
+               then Project.Chord_Slot_Id'First else This.Chord + 1);
+            Project.Set (This.Progression, This.Chord, Project.Custom_Chord, 1.0);
+            This.Note := Custom_Note_Setting'First;
+         when B_Press => Menu.Pop (Success);
+      end case;
+   end On_Event;
 
    -----------------
    -- Push_Window --
@@ -244,34 +311,19 @@ package body WNM.GUI.Menu.Chord_Settings is
                Duration : constant WNM.Duration_In_Steps :=
                  WNM.Project.Selected_Duration (Prog, Id);
 
-               Notes : constant WNM.Chord_Settings.Chord_Notes :=
-                 Tonic + WNM.Chord_Settings.Chords (Name);
             begin
-
-               Draw_MIDI_Note (Tonic,
-                               Sub = WNM.Project.Tonic);
-
-               Draw_Value_Pos (WNM.Chord_Settings.Img (Name),
-                               WNM.GUI.Menu.Drawing.Box_Center.X - 27,
-                               Sub = WNM.Project.Name);
-
-               Draw_Step_Duration (WNM.GUI.Menu.Drawing.Box_Center.X + 31,
-                                   Duration,
-                                   Sub = WNM.Project.Duration);
-
-               declare
-                  Width : constant := (4 * 4 - 1) * Font_Width;
-                  X : Natural := Screen_Width / 2 - Width / 2;
-               begin
-                  for K of Notes loop
-                     GUI.Bitmap_Fonts.Print (X,
-                                             Menu.Drawing.Box_Top + 10,
-                                             Key_Img (K));
-                     GUI.Bitmap_Fonts.Print (X,
-                                             Menu.Drawing.Box_Top + 10,
-                                             " ");
-                  end loop;
-               end;
+               if Sub = Project.Name and then
+                 Project.Selected_Custom (Prog, Id)
+               then
+                  Draw_Title ("Scale: Custom", "A: edit notes");
+               end if;
+               Draw_MIDI_Note (Tonic, Sub = Project.Tonic);
+               Draw_Value_Pos
+                 ((if Project.Selected_Custom (Prog, Id) then "Custom"
+                   else WNM.Chord_Settings.Img (Name)),
+                  Box_Center.X - 27, Sub = Project.Name);
+               Draw_Step_Duration (Box_Center.X + 31, Duration,
+                                   Sub = Project.Duration);
             end;
 
          when Add_Remove =>
@@ -288,16 +340,19 @@ package body WNM.GUI.Menu.Chord_Settings is
             end case;
 
          when Magic_Hat =>
-            Draw_Title ("Magic Hat of Chords",
+            Draw_Title ((if This.Hat_Scale = Project.Custom
+                         then "Custom chords" else "Magic Hat of Chords"),
                         "Scale: " & This.Hat_Scale'Img);
-            Draw_Value ("Press A");
-
-            Draw_Magic_Hat (Box_Center.X + 25,
+            Draw_Value ((if This.Hat_Scale = Project.Custom
+                         then "A: edit notes" else "Press A"));
+            if This.Hat_Scale /= Project.Custom then
+               Draw_Magic_Hat (Box_Center.X + 25,
                             Box_Top + 13,
                             This.Hat_Anim_Step /= 0,
                             This.Hat_Anim_Step);
-            if This.Hat_Anim_Step /= 0 then
-               This.Hat_Anim_Step := @ - 1;
+               if This.Hat_Anim_Step /= 0 then
+                  This.Hat_Anim_Step := @ - 1;
+               end if;
             end if;
       end case;
 
@@ -466,6 +521,14 @@ package body WNM.GUI.Menu.Chord_Settings is
                             This.Current_Chord_Setting,
                             Event.Slider_Value);
 
+            when A_Press =>
+               if This.Current_Chord_Setting = Project.Name and then
+                 Project.Selected_Custom (Prog, This.Selected_Chord)
+               then
+                  Open_Custom_Chords (Prog, This.Selected_Chord,
+                                      Convert_All => False);
+               end if;
+
             when others => null;
 
             end case;
@@ -517,10 +580,14 @@ package body WNM.GUI.Menu.Chord_Settings is
                Prev (This.Hat_Scale);
 
             when A_Press =>
-               This.Hat_Anim_Step := HAL.UInt32 (30 * 1);
-               Project.Randomly_Pick_A_Progression (Prog,
+               if This.Hat_Scale = Project.Custom then
+                  Open_Custom_Chords (Prog);
+               else
+                  This.Hat_Anim_Step := HAL.UInt32 (30 * 1);
+                  Project.Randomly_Pick_A_Progression (Prog,
                                                     This.Hat_Scale,
                                                     Random);
+               end if;
 
             when others => null;
             end case;

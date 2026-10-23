@@ -26,3 +26,9 @@ _autosave-*
 *.stdout
 
 .venv/
+.tools/
+artifacts/
+tests/bin/
+tests/obj/
+simulator/bin/
+__pycache__/

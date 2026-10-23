@@ -69,36 +69,52 @@ package body WNM.Project.Arpeggiator is
       Track : Track_Rec renames G_Project.Tracks (T);
       Arp : Arpeggiator_Rec renames Arpeggiators (T);
 
-      Note_Index : Chord_Index_Range;
+      Count : constant Standard.Positive :=
+        (if Track.Arp_Notes = Custom then Track.Arp_Length
+         else Chord_Notes'Length);
+      Index : Natural;
+      Position : Natural;
    begin
-
       case Track.Arp_Mode is
          when Random =>
-            Note_Index :=
-              Chord_Index_Range (Natural (WNM.Random) mod
-                                     Natural (Chord_Index_Range'Last + 1));
-         when others =>
+            Index := Natural (WNM.Random) mod Count;
+         when Up =>
+            Index := Arp.Next_Index mod Count;
+         when Down =>
+            Index := Count - 1 - Arp.Next_Index mod Count;
+         when Up_Down =>
+            if Count = 1 then
+               Index := 0;
+            else
+               Position := Arp.Next_Index mod (2 * Count - 2);
+               Index := (if Position < Count then Position
+                         else 2 * Count - 2 - Position);
+            end if;
+         when Pattern1 | Pattern2 | Pattern3 =>
             declare
                Pat : constant Arp_Pattern_Acc :=
                  (case Track.Arp_Mode is
-                     when Up       => Arp_Up'Access,
-                     when Down     => Arp_Down'Access,
-                     when Up_Down  => Arp_Up_Down'Access,
-                     when Pattern1 => Arp_Pat1'Access,
-                     when Pattern2 => Arp_Pat2'Access,
-                     when Pattern3 => Arp_Pat3'Access,
-                     when Random   => raise Program_Error);
+                    when Pattern1 => Arp_Pat1'Access,
+                    when Pattern2 => Arp_Pat2'Access,
+                    when others => Arp_Pat3'Access);
             begin
-               if Arp.Next_Index not in Pat'Range then
-                  Arp.Next_Index := Pat'First;
-               end if;
-
-               Note_Index := Pat (Arp.Next_Index);
-               Arp.Next_Index := Arp.Next_Index + 1;
+               Index := Natural (Pat (Arp.Next_Index mod Pat'Length)) mod Count;
             end;
       end case;
-
-      return Current_Chord (Note_Index);
+      --  Keep the counter bounded during indefinitely looping performances.
+      declare
+         Cycle : constant Standard.Positive :=
+           (case Track.Arp_Mode is
+              when Up | Down | Random => Count,
+              when Up_Down => (if Count = 1 then 1 else 2 * Count - 2),
+              when Pattern1 | Pattern2 => 8,
+              when Pattern3 => 7);
+      begin
+         Arp.Next_Index := (Arp.Next_Index + 1) mod Cycle;
+      end;
+      return (if Track.Arp_Notes = Custom
+              then Track.Arp_Keys (Index + 1)
+              else Current_Chord (Chord_Index_Range (Index)));
    end Next_Note;
 
    -----------------------------

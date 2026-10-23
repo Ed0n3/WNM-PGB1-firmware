@@ -40,6 +40,8 @@ with HAL;                   use HAL;
 package body WNM.Project.Step_Sequencer is
 
    G_Keyboard_Octave : Octave_Offset := 0;
+   Last_Step_At : Time.Time_Microseconds := 0;
+   Have_Step_Time : Boolean := False;
 
    Pattern_Counter : array (Tracks, Patterns) of UInt32;
    --  Count how many times a pattern has played
@@ -140,7 +142,7 @@ package body WNM.Project.Step_Sequencer is
          when Synth_Track_Mode_Kind =>
             declare
                Chan : constant MIDI.MIDI_Channel :=
-                 Voice_MIDI_Chan (Mode (T));
+                 Voice_MIDI_Chan (T);
             begin
 
                WNM.Coproc.Push_To_Synth ((WNM.Coproc.MIDI_Event,
@@ -174,7 +176,7 @@ package body WNM.Project.Step_Sequencer is
    begin
       case Mode (T) is
          when Synth_Track_Mode_Kind =>
-            Chan := Voice_MIDI_Chan (Mode (T));
+            Chan := Voice_MIDI_Chan (T);
             Target := Internal;
 
          when MIDI_Mode =>
@@ -206,7 +208,7 @@ package body WNM.Project.Step_Sequencer is
       Chan : constant MIDI.MIDI_Channel :=
         (case M is
             when Synth_Track_Mode_Kind =>
-              Voice_MIDI_Chan (M),
+              Voice_MIDI_Chan (T),
             when MIDI_Mode =>
               G_Project.Tracks (T).Chan);
    begin
@@ -400,7 +402,8 @@ package body WNM.Project.Step_Sequencer is
         (if S mod 2 = 0 and then Track.Shuffle /= 0
          then ((Ms_Per_Beat / 4) / 100) *
                 Time.Time_Microseconds (Track.Shuffle)
-         else 0);
+         else 0) + (Ms_Per_Beat / Steps_Per_Beat) *
+           Time.Time_Microseconds (Step.Timing) / 128;
 
       Octave : constant Octave_Offset := Add_Sat (Step.Oct, Track.Offset);
    begin
@@ -652,6 +655,8 @@ package body WNM.Project.Step_Sequencer is
             return;
          end if;
 
+         Last_Step_At := Time.Clock;
+         Have_Step_Time := True;
          for Track in Tracks loop
             Process_Step (Track,
                           G_Play_State.Playheads (Track).P,
@@ -661,6 +666,50 @@ package body WNM.Project.Step_Sequencer is
       end if;
 
    end Execute_Step;
+
+   procedure Record_Note (Key : MIDI.MIDI_Key;
+                          Velocity : MIDI.MIDI_Data;
+                          Now : Time.Time_Microseconds := Time.Clock)
+   is
+      T : constant Tracks := Editing_Track;
+      PH : constant Playhead := Playing_Step (T);
+      P : constant Patterns :=
+        (if Playing and then Have_Step_Time then PH.P else Editing_Pattern);
+      S : constant Sequencer_Steps :=
+        (if Playing and then Have_Step_Time then Sequencer_Steps (PH.Steps_Count)
+         else Editing_Step);
+      Data : Step_Rec renames G_Project.Steps (T)(P)(S);
+      Span : constant Time.Time_Microseconds := Microseconds_Per_Beat / Steps_Per_Beat;
+      Phase : Time.Time_Microseconds := 0;
+      Gate : Time.Time_Microseconds;
+   begin
+      if Playing and then Have_Step_Time and then not Record_Quantize (T)
+        and then Now >= Last_Step_At
+      then
+         Phase := Time.Time_Microseconds'Min (Now - Last_Step_At, Span - 1);
+      end if;
+      Data.Note_Mode := Note;
+      Data.Note := Key;
+      Data.Trig := Always;
+      Data.Oct := 0;
+      Data.Repeat := 0;
+      Data.Velo := Velocity;
+      Data.Timing := MIDI.MIDI_Data (Phase * 128 / Span);
+      Editing_Pattern := P;
+      Editing_Step := S;
+      --  Each cell stores one pitch. Its existing gate length and parameter
+      --  locks remain editable using the normal step editor.
+      Gate := (case Data.Duration is
+        when Double => Microseconds_Per_Beat * 8,
+        when Whole => Microseconds_Per_Beat * 4,
+        when Half => Microseconds_Per_Beat * 2,
+        when Quarter => Microseconds_Per_Beat,
+        when N_8th => Microseconds_Per_Beat / 2,
+        when N_16th => Microseconds_Per_Beat / 4,
+        when N_32nd => Microseconds_Per_Beat / 8);
+      Process_CC_Values (P, T, S);
+      Play_Now (Now, T, Offset (Key, G_Project.Tracks (T).Offset), Velocity, Gate);
+   end Record_Note;
 
    --------------
    -- On_Press --
@@ -717,18 +766,7 @@ package body WNM.Project.Step_Sequencer is
                      T : constant Tracks := Editing_Track;
                   begin
                      if UI.Recording then
-                        declare
-                           P : constant Patterns := Editing_Pattern;
-                           S : constant Sequencer_Steps := Editing_Step;
-                           pragma Warnings (Off, "not referenced");
-                           Step_Data : Step_Rec renames
-                             G_Project.Steps (T)(P)(S);
-                           pragma Warnings (On, "not referenced");
-                        begin
-                           Step_Data.Note_Mode := Note;
-                           Step_Data.Note := Key;
-                           Play_Step (P, T, S);
-                        end;
+                        Record_Note (Key, MIDI.MIDI_Data'Last);
 
                      else
                         Play_Now (Time.Clock,
@@ -797,7 +835,7 @@ package body WNM.Project.Step_Sequencer is
                                G_Keyboard_Octave);
                   begin
                      WNM.Coproc.Push_To_Synth
-                       ((WNM.Coproc.MIDI_Event,
+                       ((WNM.Coproc.Sample_Preview,
                         (MIDI.Note_On,
                          WNM.Synth.Sample_Rec_Playback_Channel,
                          Key,
@@ -887,8 +925,13 @@ package body WNM.Project.Step_Sequencer is
    begin
       Playing := True;
 
+      Have_Step_Time := False;
+
       --  Clear counters
       Pattern_Counter := (others => (others => 0));
+      for T in Tracks loop
+         Arpeggiator.Signal_Start_Of_Pattern (T);
+      end loop;
 
       Current_Playing_Step := Sequencer_Steps'First;
    end Song_Start_Callback;
@@ -900,6 +943,7 @@ package body WNM.Project.Step_Sequencer is
    procedure Song_Stop_Callback is
    begin
       Playing := False;
+      Have_Step_Time := False;
       G_Roll_State := Off;
       G_Auto_Fill_State := Off;
    end Song_Stop_Callback;

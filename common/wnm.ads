@@ -120,6 +120,11 @@ package WNM is
    function Img (L : CPU_Load) return String;
 
    subtype Key_Img_Str is String (1 .. 3);
+   function MIDI_Number_Img (V : MIDI.MIDI_Key) return Key_Img_Str
+   is (1 => Character'Val (Character'Pos ('0') + Integer (V) / 100),
+       2 => Character'Val (Character'Pos ('0') + Integer (V) / 10 mod 10),
+       3 => Character'Val (Character'Pos ('0') + Integer (V) mod 10));
+
    function Key_Img (V : MIDI.MIDI_Key) return Key_Img_Str
    is (case V is
           when MIDI.A0  => "A0 ",
@@ -221,6 +226,6 @@ package WNM is
           when MIDI.A8  => "A8 ",
           when MIDI.As8 => "A#8",
           when MIDI.B8  => "B8 ",
-          when others => "---");
+          when others => MIDI_Number_Img (V));
 
 end WNM;

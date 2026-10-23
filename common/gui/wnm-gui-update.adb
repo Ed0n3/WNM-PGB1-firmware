@@ -72,7 +72,7 @@ package body WNM.GUI.Update is
                 Y_Offset    => 0,
                 Str         =>
                   Img (Synth.Synth_CPU_Load
-                    (Project.Voice_MIDI_Chan (Project.Mode (T)))));
+                    (Project.Voice_MIDI_Chan (T))));
       end if;
 
       B := 79;

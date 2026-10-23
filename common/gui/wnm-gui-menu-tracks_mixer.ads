@@ -46,7 +46,7 @@ private
    package Top_Settings_Next is new Enum_Next (Top_Settings);
    use Top_Settings_Next;
 
-   subtype Track_Id is Tracks range 1 .. 8;
+   subtype Track_Id is Project.Instrument_Tracks;
    package Track_Id_Next is new Enum_Next (Track_Id, Wrap => False);
    use Track_Id_Next;
 
